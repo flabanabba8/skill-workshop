@@ -1,5 +1,7 @@
 # Skill Workshop
 
+![Skill Workshop](assets/thumbnail.jpg)
+
 Get new skills for Hermes safely: mine them from your past chats, build them from a description, and guard against prompt injection in skills and content you bring in.
 
 **At a glance**
