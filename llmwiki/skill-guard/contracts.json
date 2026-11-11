@@ -1,0 +1,43 @@
+{
+  "status": "actual registered source schemas; handlers not executed for schema capture",
+  "tools": [
+    {
+      "name": "skillguard_scan_installed",
+      "description": "Scan every skill already installed (Hermes skills folder and any external skill folders) for prompt injection and list each as clean, approved, quarantined or flagged, with file and line for every finding. Reads files only; changes nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "include_clean": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "skillguard_decide",
+      "description": "Record the user's decision about one installed skill, for its exact current version: approve (use it as it is despite the findings) or quarantine (never hand its instructions to the agent). Always requires a person to confirm.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "quarantine"
+            ]
+          }
+        },
+        "required": [
+          "skill",
+          "decision"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

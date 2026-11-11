@@ -2,20 +2,20 @@
 
 ![Skill Workshop](assets/thumbnail.jpg)
 
-Get new skills for Hermes safely: mine them from your past chats, build them from a description, and guard against prompt injection in skills and content you bring in.
+Get new skills for Hermes safely. Skill Workshop scans every skill before it is installed or used, including ones from other people, and it helps you mine skills from your past chats and build them from a description.
 
-**New in 0.2.0:** every skill is checked for prompt injection before it is installed, whether Skill Miner mined it or Skill Builder built it. If the check finds hidden text, instructions aimed at your agent, or commands that send secrets out, the skill is not installed and you get each finding with its line number. You can also ask Hermes to check a skill you downloaded (a file or a folder) before you install it.
+**New in 0.3.0:** Skill Workshop scans every skill before it is installed or used, including ones from other people. When Hermes writes a skill, or a file in your skills folder, the new text is scanned first and you see each finding (file and line) in the approval box. When a skill is loaded, it is scanned again: a skill with hidden text, instructions aimed at your agent, or commands that send secrets out is held back from the agent, and the agent tells you and waits for your decision (approve this exact version, or quarantine it). A skill added any other way (`hermes skills install`, copying a folder in) is scanned as soon as Hermes reports it, and at its first use. Ask "scan my installed skills" to see every skill as clean or flagged, with file and line. Your decisions are remembered by a hash of the skill's files, so a clean or approved skill is not asked about again, and any change to a file is scanned again. Skill Miner now names a mined skill from what you asked, and ignores the housekeeping calls (finding a skill, searching files) that open almost every chat.
 
 **At a glance**
 
 - **Who it is for:** people who want their Hermes agent to learn new skills, and who worry about what an imported skill or a web page could make the agent do.
 - **Install:** `hermes plugins install flabanabba8/skill-workshop`, then `hermes plugins enable skill-workshop`, then restart Hermes.
 - **Needs:** Hermes 0.22 or later. No API keys, no extra tools, no Python packages. Skill Miner needs some past Hermes sessions to look at.
-- **Internet:** nothing. None of the three parts makes a network call or a model call of its own.
+- **Internet:** nothing. None of the four parts makes a network call or a model call of its own.
 - **Platform:** Linux is the only platform checked.
-- **Safety:** every skill is scanned for prompt injection before install (a plain pattern check, not proof), and nothing is installed as a skill without a person confirming, and the Shield only blocks or asks; it never bypasses a Hermes approval.
+- **Safety:** every skill is scanned for prompt injection before it is installed or used (a plain pattern check, not proof). Nothing is installed as a skill without a person confirming, a flagged skill is not handed to the agent until you decide, and the Shield and the Guard only block or ask; they never bypass a Hermes approval.
 
-## The three parts
+## The four parts
 
 Skill Miner and Skill Builder are two ways to get a skill. Taint Shield sits with them because prompt injection is a real fear with imported skills and untrusted content: a skill, web page or file can hide instructions meant for your agent, not for you.
 
@@ -23,11 +23,12 @@ Skill Miner and Skill Builder are two ways to get a skill. Taint Shield sits wit
 |---|---|---|
 | **Skill Miner** | Looks through your recent Hermes sessions for sequences of tool calls you repeat, checks each on sessions held out of the mining, and drafts a skill for you to review. The host agent then diagnoses, refines and re-checks the draft. | `miner_scan`, `miner_propose`, `miner_diagnose`, `miner_refine`, `miner_check`, `miner_install` |
 | **First Principles Skill Builder** | Helps the agent write a skill from a description so it fits the tools, hardware and permissions you actually have: it discovers resources, lints the draft, records three contrasting-case walk-throughs and keeps a revision history. | `skillbuilder_resources`, `skillbuilder_save`, `skillbuilder_check`, `skillbuilder_case`, `skillbuilder_install` |
+| **Skill Guard** | Scans every skill before it is installed or used, including ones from other people. It checks what Hermes is about to write into the skills folder, checks each skill again when it is loaded (a flagged, unapproved one is replaced by a plain warning naming the findings), scans skills added by other routes when Hermes reports them, lists every installed skill as clean or flagged, and remembers your decisions by content hash. | `skillguard_scan_installed`, `skillguard_decide` |
 | **Taint Shield** | A prompt-injection guard. It remembers which URLs, addresses and command lines came from untrusted web, browser, mail or file content, and blocks or asks before the agent uses them in a shell command, a file write or an outgoing message. | `shield_report`, `shield_scan`, `shield_trust` |
 
-That is 14 tools, and four hooks: `pre_llm_call`, `post_tool_call`, `transform_tool_result`, and `pre_tool_call` (registered three times: the Shield's check, and the install approvals of Skill Miner and Skill Builder). Each part also registers its skill (`skill-miner`, `first-principles-skill-builder`, `taint-shield`). Nothing else is registered: no commands, no middleware, no desktop or dashboard surface.
+That is 16 tools, and five hooks: `pre_llm_call`, `post_tool_call`, `transform_tool_result`, `on_skill_lifecycle`, and `pre_tool_call` (registered four times: the Shield's check, the Guard's install scan, and the install approvals of Skill Miner and Skill Builder). Each part also registers its skill (`skill-miner`, `first-principles-skill-builder`, `taint-shield`, `skill-guard`). Nothing else is registered: no commands, no middleware, no desktop or dashboard surface.
 
-Each part behaves exactly as its stand-alone plugin did; this repository bundles the three into one plugin so they can be installed together. A short example: ask Hermes "find a workflow I repeat and turn it into a skill" (Skill Miner), or "build me a skill that turns meeting recordings into notes on this machine" (Skill Builder). While either runs, the Shield watches what the agent reads and does.
+Each part behaves exactly as its stand-alone plugin did; this repository bundles the three into one plugin so they can be installed together (Skill Guard is new in 0.3.0). A short example: ask Hermes "find a workflow I repeat and turn it into a skill" (Skill Miner), or "build me a skill that turns meeting recordings into notes on this machine" (Skill Builder). While either runs, the Shield watches what the agent reads and does.
 
 ## What each part does
 
@@ -35,7 +36,7 @@ Each part behaves exactly as its stand-alone plugin did; this repository bundles
 
 You solve the same kinds of tasks again and again. Skill Miner reads Hermes's session database (opened read-only) for tool-call sequences that recur, checks that each holds up, and drafts a skill. It proposes only.
 
-- `miner_scan` reads only tool names and counts. Sequences of 3 to 6 steps that appear in at least `min_support` sessions (default 3) are candidates; mining uses two thirds of your sessions and the rest are held out. A `recommend` verdict needs enough support, at least 75 percent consistency, and at least one held-out hit.
+- `miner_scan` reads only tool names and counts. Sequences of 3 to 6 steps that appear in at least `min_support` sessions (default 3) are candidates (a two-step chore that writes a file is accepted when your requests share wording); housekeeping calls that open almost every chat (listing or viewing skills, searching tools or files) are left out, and candidates are ranked by what is specific to the job: your shared request words, the file types touched and the write steps. A drafted skill is named and described from your request; mining uses two thirds of your sessions and the rest are held out. A `recommend` verdict needs enough support, at least 75 percent consistency, and at least one held-out hit.
 - `miner_propose` drafts a `SKILL.md` for one pattern, with abstracted typical arguments (paths, URLs, long ids and numbers replaced, secrets redacted by pattern) and up to three of your original request texts. This is the only step that reads message text.
 - `miner_diagnose` returns bounded (8000 characters), redacted context for one proposal or revision for the host agent to reason over: structural problems in the draft and where its supporting sessions hit errors or retries.
 - `miner_refine` saves the agent's revised text as a numbered revision beside the original, which is never modified.
@@ -56,6 +57,17 @@ You ask for a skill, or you have one that only works on one machine. The method 
 
 Limits: the checks are structural lint, not a judgment that a skill works; the walk-throughs are reasoning, not execution; GPU detection covers NVIDIA only.
 
+### Skill Guard
+
+Skills from other people can hide instructions meant for your agent. Skill Guard scans every skill, whoever wrote it, with the same plain pattern check as the Shield, line by line.
+
+- **Before it is installed:** when Hermes writes a skill (`skill_manage`) or a file inside your skills folders, the new text is scanned first. A clean write goes through silently; a write with findings asks you, with every finding (file, line, what it is) in the approval text. Skills the workshop installs itself after a clean scan are recorded as clean.
+- **When it is used:** when a skill is loaded, its files are scanned. A flagged version nobody has approved is not handed to the agent: it gets a plain warning naming the findings and is told not to follow those lines until you decide, and to tell you. You are told once per version. A `/skill-name` command is checked the same way and is stopped before the model sees the text.
+- **Added another way:** `hermes skills install` and copying a folder in have no hook before they land, so Hermes reports the new skill afterwards and the Guard scans it then (and tells you at your next message); the use-time check holds it back either way.
+- **Scan what you have:** `skillguard_scan_installed` ("scan my installed skills") lists every skill in your skills folders as clean, approved, quarantined or flagged, with file and line for each finding.
+- **Your decisions:** `skillguard_decide` records approve (use it as it is) or quarantine (never hand it to the agent) for the exact current version, and always asks a person to confirm. Decisions are kept by content hash, so a clean or approved skill is never re-scanned or re-asked, and a changed file is scanned again.
+- **Limits:** a pattern check, not proof; it cannot see a malicious skill that is rephrased, encoded or hidden in an image. Files the agent writes into the skills folder with a shell command are caught at their first use, not before.
+
 ### Taint Shield
 
 Text the agent reads from the web, a browser, mail or similar sources is untrusted, and attackers hide instructions in it. Taint Shield remembers what came from untrusted content and stops the agent acting on it.
@@ -70,17 +82,17 @@ Limits: this is heuristic provenance, not proof. It matches literal values, so a
 
 ## Where the data goes
 
-All three parts keep their data under one Hermes data folder, `plugin-data/skill-workshop/`, one sub-folder each: `skill-miner/proposals/`, `first-principles-skill-builder/drafts/` and `taint-shield/trusted.json`. Data written by the stand-alone plugins (under `plugin-data/skill-miner/` and so on) is not read or migrated. Installing a skill writes one new `<HERMES_HOME>/skills/<name>/SKILL.md`, and only after you confirm.
+All four parts keep their data under one Hermes data folder, `plugin-data/skill-workshop/`, one sub-folder each: `skill-miner/proposals/`, `first-principles-skill-builder/drafts/`, `taint-shield/trusted.json` and `skill-guard/decisions.json` (a content hash, a skill name and a decision for each skill version; no skill text). Data written by the stand-alone plugins (under `plugin-data/skill-miner/` and so on) is not read or migrated. Installing a skill writes one new `<HERMES_HOME>/skills/<name>/SKILL.md`, and only after you confirm.
 
 ## Limits of the suite
 
 - Linux is the only platform checked.
-- The desktop and dashboard surfaces are not part of this plugin; none of the three parts had one.
+- The desktop and dashboard surfaces are not part of this plugin; none of the parts has one.
 - Taint Shield guards the tool calls of the whole Hermes session, not only the other two parts. It can ask or block on ordinary work that follows untrusted content; trust a destination with `shield_trust` if you want it to stop asking.
 - Live evidence for each part is the part's own (see VERIFICATION.md). The suite itself was tested offline plus the Hermes admission check.
 
 ## Credits and licence
 
-No third-party code or data is bundled: all three parts are original code with no vendored libraries, no downloaded tools and no media. The plugin does not use TMDB, ani-cli, Luffy, Live2D or any other upstream tool. Licence: GPL-3.0-or-later (see LICENSE).
+No third-party code or data is bundled: all four parts are original code with no vendored libraries, no downloaded tools and no media. The plugin does not use TMDB, ani-cli, Luffy, Live2D or any other upstream tool. Licence: GPL-3.0-or-later (see LICENSE).
 
 **AI assistance:** written with AI coding assistants (Anthropic Claude and OpenAI Codex agents) under the maintainer's direction; what was actually tested is listed in VERIFICATION.md.

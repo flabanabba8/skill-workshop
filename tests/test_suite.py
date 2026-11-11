@@ -31,24 +31,24 @@ class SuiteRegistration(unittest.TestCase):
     def test_tools_are_exactly_the_declared_tools_once_each(self):
         self.assertEqual(sorted(self.ctx.tools), sorted(declared('provides_tools')))
         self.assertEqual(len(self.ctx.tools), len(set(self.ctx.tools)))
-        self.assertEqual(len(self.ctx.tools), 14)
+        self.assertEqual(len(self.ctx.tools), 16)
 
     def test_hooks_are_exactly_the_declared_hooks(self):
         self.assertEqual(sorted(set(self.ctx.hooks)), sorted(declared('provides_hooks')))
-        self.assertEqual(sorted(self.ctx.hooks), sorted(['pre_llm_call', 'post_tool_call', 'transform_tool_result', 'pre_tool_call', 'pre_tool_call', 'pre_tool_call']))
+        self.assertEqual(sorted(self.ctx.hooks), sorted(['pre_llm_call', 'post_tool_call', 'transform_tool_result', 'pre_tool_call', 'pre_llm_call', 'post_tool_call', 'transform_tool_result', 'pre_tool_call', 'on_skill_lifecycle', 'pre_tool_call', 'pre_tool_call']))
 
     def test_nothing_else_is_registered(self):
         self.assertEqual(self.ctx.other, [])
 
     def test_each_part_skill_is_registered_and_exists(self):
-        self.assertEqual(sorted(self.ctx.skills), ['first-principles-skill-builder', 'skill-miner', 'taint-shield'])
+        self.assertEqual(sorted(self.ctx.skills), ['first-principles-skill-builder', 'skill-guard', 'skill-miner', 'taint-shield'])
         for path in self.ctx.skills.values(): self.assertTrue(path.is_file(), path)
 
     def test_tool_reference_lists_exactly_the_registered_tools(self):
         text = (root / 'llmwiki/tools.md').read_text()
         listed = re.findall(r'^## (\w+)$', text, re.M)
         self.assertEqual(sorted(listed), sorted(self.ctx.tools))
-        for part in ('skill-miner', 'first-principles-skill-builder', 'taint-shield'):
+        for part in ('skill-miner', 'first-principles-skill-builder', 'taint-shield', 'skill-guard'):
             part_text = (root / 'llmwiki' / part / 'tools.md').read_text()
             for name in re.findall(r'^## (\w+)$', part_text, re.M): self.assertIn(name, self.ctx.tools)
 
@@ -73,13 +73,13 @@ class SuiteRegistration(unittest.TestCase):
             saved = {k: sys.modules.get(k) for k in ('plugins', 'plugins.plugin_storage')}
             sys.modules['plugins'] = sys.modules.get('plugins') or types.ModuleType('plugins'); sys.modules['plugins.plugin_storage'] = storage
             try:
-                dirs = [suite.storage.part_data_dir(p) for p in ('skill-miner', 'first-principles-skill-builder', 'taint-shield')]
+                dirs = [suite.storage.part_data_dir(p) for p in ('skill-miner', 'first-principles-skill-builder', 'taint-shield', 'skill-guard')]
             finally:
                 for k, v in saved.items():
                     if v is None: sys.modules.pop(k, None)
                     else: sys.modules[k] = v
             self.assertEqual({d.parent.name for d in dirs}, {'skill-workshop'})
-            self.assertEqual(len({d.name for d in dirs}), 3)
+            self.assertEqual(len({d.name for d in dirs}), 4)
 
 
 if __name__ == '__main__': unittest.main()

@@ -13,6 +13,11 @@ from .retired_policy import require_current_workflow
 ID = re.compile(r'^[0-9a-f]{12}$')
 NAME = re.compile(r'^[a-z0-9][a-z0-9-]{2,60}$')
 TRIVIAL = {'read_file', 'search_files', 'terminal:ls', 'terminal:cat', 'terminal:echo', 'terminal:cd', 'terminal:pwd', 'terminal:head', 'terminal:tail', 'terminal:grep', 'terminal:find'}
+# Calls that open almost any session (find a skill, search for a tool, list or search files) say nothing about the chore the user repeated.
+HOUSEKEEPING = {'skills_list', 'skill_view', 'search_files', 'list_files', 'tool_search', 'search_tools', 'list_tools', 'tool_details', 'get_tool', 'describe_tool', 'session_search', 'todo', 'terminal:ls', 'terminal:pwd', 'terminal:cd', 'terminal:which', 'terminal:echo', 'terminal:tree'}
+DISCOVERY_NAME = re.compile(r'^(?:skills?_(?:list|view|search)|(?:list|search|find|describe|get)_(?:files?|tools?|skills?|docs?|schemas?)|tool_(?:search|details?|info|docs?|help)|.*_(?:tool|schema)_(?:details?|info|docs?))$')
+WRITES = {'write_file', 'patch', 'edit_file', 'create_file', 'append_file', 'skill_manage', 'terminal:tee', 'terminal:sed', 'terminal:mv', 'terminal:cp', 'terminal:mkdir', 'terminal:git'}
+STOP = set('a an and are as at be but by can could do does for from get give had has have help how i if in into is it its just let like make me my need not of on one or our out please that the their them then there these they this to turn up us use want was we what when which who will with would you your all any some also new now each every after before about over again more most other same than too very via should create write run using put take show tell'.split())
 REDACT = [re.compile(p) for p in (r'sk-[A-Za-z0-9_-]{16,}', r'gh[pousr]_[A-Za-z0-9]{20,}', r'xox[abprs]-[A-Za-z0-9-]{10,}', r'AKIA[0-9A-Z]{16}', r'(?i)bearer\s+[A-Za-z0-9._~+/=-]{16,}',
                                    r'(?i)(api[_-]?key|token|secret|password)["\']?\s*[:=]\s*["\']?[A-Za-z0-9._~+/=-]{10,}')]
 
@@ -98,8 +103,9 @@ def load(db, days, limit=400, ids=None):
             have = {r[0] for r in con.execute(f'SELECT id FROM sessions WHERE id IN ({marks})', ids)} if ids else set(); ids = [i for i in ids if i in have]
         sessions = []
         for sid in ids:
-            calls, steps = {}, []
+            calls, steps, request = {}, [], ''
             for role, tool_calls, tool_name, content, call_id in con.execute('SELECT role, tool_calls, tool_name, content, tool_call_id FROM messages WHERE session_id = ? ORDER BY id', (sid,)):
+                if role == 'user' and not request and content: request = abstract(' '.join(str(content).split()), 300)
                 if role == 'assistant' and tool_calls:
                     try:
                         for c in json.loads(tool_calls):
@@ -110,7 +116,7 @@ def load(db, days, limit=400, ids=None):
                     outer = calls.get(call_id, (None, {}, None)); tool, args, mapped, raw = resolve_call(tool_name, *outer)
                     bad = failed(content or '')
                     steps.append({'token': token(tool, args), 'failed': bad, 'args': args, 'tool': tool, 'mapped': mapped, 'raw': tool + '\n' + json.dumps(raw, ensure_ascii=False, default=str), 'err': error_text(content) if bad else ''})
-            if steps: sessions.append({'id': sid, 'steps': steps})
+            if steps: sessions.append({'id': sid, 'steps': steps, 'request': request})
     finally: con.close()
     return sessions
 
@@ -132,31 +138,72 @@ def contains(seq, pattern):
 def pid(pattern): return hashlib.sha256('|'.join(pattern).encode()).hexdigest()[:12]
 
 
+def is_housekeeping(tok): return tok in HOUSEKEEPING or bool(DISCOVERY_NAME.match(tok))
+
+
+def terms_of(text): return [w for w in re.findall(r"[a-z][a-z'-]{2,}", (text or '').lower()) if w not in STOP and not w.startswith('<')]
+
+
+def shared_terms(requests, share=0.6, limit=6):
+    """Words that most of the repeated requests contain, in the order the first request uses them."""
+    reqs = [terms_of(r) for r in requests if r]
+    if len(reqs) < 2: return []
+    count = Counter(w for r in reqs for w in set(r)); need = max(2, -(-int(share * 100) * len(reqs) // 100))
+    out = []
+    for w in reqs[0]:
+        if count[w] >= need and w not in out: out.append(w)
+    return out[:limit]
+
+
+def shared_file_types(step_lists, share=0.6):
+    per = []
+    for steps in step_lists:
+        exts = set()
+        for x in steps:
+            for k, v in (x.get('args') or {}).items():
+                if k in ('path', 'file_path', 'file', 'filename', 'output', 'output_path', 'input') and isinstance(v, str):
+                    m = re.search(r'\.([A-Za-z0-9]{1,5})$', v.strip())
+                    if m: exts.add(m.group(1).lower())
+        per.append(exts)
+    if len(per) < 2: return []
+    c = Counter(e for ex in per for e in ex); need = max(2, -(-int(share * 100) * len(per) // 100))
+    return sorted(e for e, n in c.items() if n >= need)
+
+
 def mine(sessions, min_support=3, lo=3, hi=6):
-    seqs = [(s['id'], collapse([x['token'] for x in s['steps']])) for s in sessions]
+    """Patterns are built from the steps that belong to the chore: housekeeping calls (finding a skill, searching tools or files) that open
+    almost every session are left out. A pattern of only two steps is accepted when it writes something and the requests share wording.
+    Candidates are ranked by what is specific to the job: shared request words, shared file types and write/edit steps."""
+    core_steps = {s['id']: [x for x in s['steps'] if not is_housekeeping(x['token'])] for s in sessions}
+    seen_hk = sorted({x['token'] for s in sessions for x in s['steps'] if is_housekeeping(x['token'])})
+    seqs = [(s['id'], collapse([x['token'] for x in core_steps[s['id']]])) for s in sessions]
     train = [x for i, x in enumerate(seqs) if i % 3 != 2]; hold = [x for i, x in enumerate(seqs) if i % 3 == 2]
-    count = Counter()
+    short = min(lo, 2); count = Counter()
     for _, seq in train:
-        for g in grams(seq, lo, hi): count[g] += 1
-    cands = [g for g, c in count.items() if c >= min_support and not all(t in TRIVIAL for t in g) and len(set(g)) >= 3]
+        for g in grams(seq, short, hi): count[g] += 1
+    def writes(g): return sum(t in WRITES for t in g)
+    cands = [g for g, c in count.items() if c >= min_support and not all(t in TRIVIAL for t in g) and (len(set(g)) >= 3 or (writes(g) and len(set(g)) >= 2))]
     keep = []
     for g in sorted(cands, key=lambda g: (-len(g), -count[g])):
         if not any(len(k) > len(g) and count[k] == count[g] and contains(list(k), g) for k in keep): keep.append(g)
     by_id = {s['id']: s for s in sessions}; out = []
     for g in keep:
         support = [sid for sid, seq in seqs if contains(seq, g)]
+        terms = shared_terms([by_id[sid].get('request', '') for sid in support])
+        if len(g) < lo and not (writes(g) and len(terms) >= 2): continue
         ok = 0
         for sid in support:
-            toks = [x for x in by_id[sid]['steps']]; flat = [x['token'] for x in toks]
-            n = len(g)
+            toks = core_steps[sid]; flat = [x['token'] for x in toks]; n = len(g)
             for i in range(len(flat) - n + 1):
                 if tuple(collapse(flat[i:i + n])) == g or tuple(flat[i:i + n]) == g:
                     ok += not any(x['failed'] for x in toks[i:i + n]); break
         h_hits = sum(contains(seq, g) for _, seq in hold)
         consistency = ok / len(support) if support else 0
         verdict = 'recommend' if len(support) >= min_support and consistency >= 0.75 and (h_hits >= 1 or not hold) else 'weak'
-        out.append({'pattern_id': pid(g), 'steps': list(g), 'sessions': len(support), 'train_sessions': count[g], 'holdout_sessions_total': len(hold), 'holdout_hits': h_hits, 'consistency': round(consistency, 2), 'verdict': verdict, '_support': support, '_hold': [sid for sid, _ in hold]})
-    out.sort(key=lambda p: (p['verdict'] != 'recommend', -(p['sessions'] * len(p['steps']))))
+        types = shared_file_types([core_steps[sid] for sid in support]); spec = 3 * min(len(terms), 4) + 2 * min(len(types), 2) + 2 * min(writes(g), 2)
+        out.append({'pattern_id': pid(g), 'steps': list(g), 'sessions': len(support), 'train_sessions': count[g], 'holdout_sessions_total': len(hold), 'holdout_hits': h_hits, 'consistency': round(consistency, 2), 'verdict': verdict,
+                    'request_terms': terms, 'file_types': types, 'specificity': spec, 'housekeeping_skipped': seen_hk, '_support': support, '_hold': [sid for sid, _ in hold]})
+    out.sort(key=lambda p: (p['verdict'] != 'recommend', -p['specificity'], -(p['sessions'] * len(p['steps']))))
     return out
 
 
@@ -196,12 +243,19 @@ def draft(pattern, sessions, db):
                 if x['token'] == tok:
                     examples[sample(tok, x['args'])] += 1; break
         steps.append((tok, [e for e, _ in examples.most_common(2) if e]))
-    slug = re.sub(r'[^a-z0-9]+', '-', '-'.join(t.replace('terminal:', '') for t in pattern['steps'][:4]).lower()).strip('-')[:40]
-    name = f'workflow-{slug}'; triggers = first_user_messages(db, pattern['_support'])
+    terms = pattern.get('request_terms') or []
+    if len(terms) >= 2: slug = '-'.join(terms[:4]); name = re.sub(r'[^a-z0-9-]+', '', slug)[:50].strip('-')
+    else: name = ''
+    if not NAME.match(name):
+        slug = re.sub(r'[^a-z0-9]+', '-', '-'.join(t.replace('terminal:', '') for t in pattern['steps'][:4]).lower()).strip('-')[:40]; name = f'workflow-{slug}'
+    triggers = first_user_messages(db, pattern['_support'])
+    if len(terms) >= 2 and triggers: desc = f'Use when the user asks for the same chore as in {pattern["sessions"]} earlier chats, for example "{triggers[0][:110]}". Steps drafted from those chats; review and edit before use.'
+    else: desc = f"Repeat the {' then '.join(t.replace('terminal:', '') for t in pattern['steps'][:3])} workflow you have used in {pattern['sessions']} earlier sessions. Draft: review and edit before use."
     trig_lines = [f'- "{t}"' for t in triggers] or ['- (no request text available)']
-    lines = ['---', f'name: {name}', f"description: Repeat the {' then '.join(t.replace('terminal:', '') for t in pattern['steps'][:3])} workflow you have used in {pattern['sessions']} earlier sessions. Draft: review and edit before use.", '---', '',
+    lines = ['---', f'name: {name}', f'description: {desc}', '---', '',
              '# Draft skill (mined, unreviewed)', '', f"Mined from {pattern['sessions']} of your sessions; held-out check: {pattern['holdout_hits']} of {pattern['holdout_sessions_total']} unseen sessions repeated it; steps succeeded together in {int(pattern['consistency'] * 100)} percent of supporting sessions.", '',
              '## When this came up', *trig_lines, '', '## Steps seen, in order', '']
+    if pattern.get('housekeeping_skipped'): lines.insert(lines.index('## Steps seen, in order') + 1, 'Chats of this kind usually open with housekeeping calls (' + ', '.join(pattern['housekeeping_skipped'][:6]) + '); they are not part of the chore and are left out.'); lines.insert(lines.index('## Steps seen, in order') + 2, '')
     for i, (tok, ex) in enumerate(steps, 1):
         lines.append(f'{i}. `{tok}`' + (' - typical use: ' + '; '.join(f'`{e}`' for e in ex) if ex else ''))
     lines += ['', '## Before using', '', '- These steps are what you did, not a statement of what is correct. Check each one and remove anything specific to a single project.', '- Arguments above are abstracted (paths, URLs and numbers replaced); fill in the real ones.']
@@ -262,6 +316,7 @@ def diagnose(name, text, evidence, support, hold):
     if unmapped: add('unmapped_batched_calls', f'{unmapped} steps came from batched tool_call envelopes with duplicate calls of the same tool; their arguments were left unmapped, so their examples are missing.')
     ev = []
     for n, sess in enumerate(support[:5], 1):
+        sess = {**sess, 'steps': [x for x in sess['steps'] if not is_housekeeping(x['token'])]}
         w = window(sess['steps'], pat) if pat else None
         if not w: continue
         items = []

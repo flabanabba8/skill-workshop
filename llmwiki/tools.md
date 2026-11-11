@@ -1,9 +1,10 @@
 # Actual tool contracts (all parts)
 
-These are the 14 tools the suite registers. Registration alone does not establish
+These are the 16 tools the suite registers. Registration alone does not establish
 live backend readiness. Each part's own file has the exact input schemas.
 
 - Taint Shield: [taint-shield/tools.md](taint-shield/tools.md), [taint-shield/contracts.json](taint-shield/contracts.json)
+- Skill Guard: [skill-guard/tools.md](skill-guard/tools.md), [skill-guard/contracts.json](skill-guard/contracts.json)
 - Skill Miner: [skill-miner/tools.md](skill-miner/tools.md), [skill-miner/contracts.json](skill-miner/contracts.json)
 - First Principles Skill Builder: [first-principles-skill-builder/tools.md](first-principles-skill-builder/tools.md), [first-principles-skill-builder/contracts.json](first-principles-skill-builder/contracts.json)
 
@@ -62,3 +63,11 @@ Record a walk-through of one contrasting case for a draft revision. Inputs: `nam
 ## skillbuilder_install
 
 Install a checked draft revision as a skill. Always requires a person to confirm. Inputs: `name` (required), `revision` (optional).
+
+## skillguard_scan_installed
+
+Scan every installed skill and list each as clean, approved, quarantined or flagged, with file and line. Inputs: `include_clean` (optional).
+
+## skillguard_decide
+
+Record the user's decision for one skill's exact current version (approve or quarantine). Always requires a person to confirm. Inputs: `skill`, `decision` (both required).

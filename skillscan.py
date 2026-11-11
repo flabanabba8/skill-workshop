@@ -26,23 +26,55 @@ INSTRUCTION_WORDS = re.compile(r'\b(run|execute|send|email|upload|ignore|do not|
 PHRASES = [(rx, p) for rx, p in zip(sh.PHRASE_RES, sh.PHRASES) if p != 'system prompt']
 SENDS_DATA = re.compile(r'\b(key|token|password|secret|credential|cookie|ssh|history|files?|data|contents?)\b', re.I)
 
+# False-positive rules, found by scanning 116 real skills. Each one is narrow: hidden text, exfiltration commands and plain
+# "ignore previous instructions" style lines are still reported.
+TELL_USER_TO = re.compile(r"^\s+(to|how|where|which|what to)\b", re.I)                      # "don't tell the user to run /skin" is advice, not concealment
+SEND_USER_THERE = re.compile(r'^send (the )?(user|them|people|readers?|you) to\b', re.I)      # "Send the user to https://..." is a pointer, not exfiltration
+QUOTED = '"\'`\u201c\u2018'
+DEFENCE_WORDS = re.compile(r"\b(never|do not|don't|must not|untrusted|inject(ion|ed)?|treat\b.{0,40}\bdata|example|e\.g\.|such as|for instance|attempt|looks? like)\b", re.I)
+NEGATION_BEFORE = re.compile(r"\b(do not|don't|never|avoid|blocked?|dangerous|matching|acceptable|not allowed|refuse)\b", re.I)
+PLACEHOLDER_TAG = re.compile(r'["\'`]<\s*instructions?\s*>["\'`]', re.I)                       # a quoted <instruction> argument placeholder
+CASE_SENSITIVE = {'\\[(?:SYSTEM|INST)\\]'}                                                   # "[system]" in lower case is an ordinary placeholder
+
 
 def _secret(line):
     # a secret FILE or dump; an environment variable passed to the API it belongs to is ordinary
     return any(not m.group(0).startswith('$') for m in sh.SECRET_PATH.finditer(line))
 
 
+def _phrase_is_ordinary(rx, p, m, line):
+    """True when a phrase match is clearly not an instruction to an AI."""
+    after = line[m.end():]; before = line[:m.start()]
+    if p.startswith("(don't|do not) (tell|let)") or p.startswith('do not (tell|inform'):
+        if TELL_USER_TO.match(after): return True
+    if p.startswith('(send|email') and SEND_USER_THERE.match(m.group(0).strip()): return True
+    if p in CASE_SENSITIVE and not re.search(p, m.group(0)): return True
+    if p.startswith('<\\s*(system|instructions?)') and PLACEHOLDER_TAG.search(line) and 'system' not in m.group(0).lower(): return True
+    # a defensive skill quoting an attack phrase ("treat ... as data; if it says 'ignore previous instructions' do not follow it")
+    if p.startswith('ignore (all') or p.startswith('disregard'):
+        quoted = before.rstrip()[-1:] in QUOTED and (after[:1] in QUOTED or after[:2].strip(',.') == '' or after[:1] in ',.')
+        if quoted and DEFENCE_WORDS.search(line): return True
+    return False
+
+
+def _in_code_span_both(line, *regexes):
+    """True when one backtick span holds a match for every regex (the real shape of a command written inline)."""
+    spans = re.findall(r'`([^`]+)`', line)
+    return any(all(r.search(s) for r in regexes) for s in spans)
+
+
 def _line_findings(line, hidden_context=False):
     out = []
     for rx, p in PHRASES:
         m = rx.search(line)
-        if m and (not p.startswith('(send|email') or SENDS_DATA.search(line)): out.append(('injection-like instruction', m.group(0).strip()[:80]))
-    cmd_like = bool(sh.COMMAND_LINE.search(line)) or '`' in line or hidden_context
+        if m and (not p.startswith('(send|email') or SENDS_DATA.search(line)) and not _phrase_is_ordinary(rx, p, m, line): out.append(('injection-like instruction', m.group(0).strip()[:80]))
     secret, egress, stage, persist = _secret(line), sh.EGRESS.search(line), sh.STAGE.search(line), sh.PERSIST.search(line)
+    cmd_like = bool(sh.COMMAND_LINE.search(line)) or hidden_context or ('`' in line and (not secret or _in_code_span_both(line, sh.SECRET_PATH, sh.EGRESS) or _in_code_span_both(line, sh.SECRET_PATH, sh.STAGE) or _in_code_span_both(line, sh.PERSIST) or bool(re.match(r'\s*[-*>\d.)]*\s*(run|execute|then)\b', line, re.I))))
     if secret and egress and cmd_like: out.append(('command that sends a local secret out', line.strip()[:100]))
     elif secret and stage and cmd_like and re.search(r'\b(cp|mv|rsync|tar|zip|7z|dd)\b', line, re.I): out.append(('command that copies a local secret', line.strip()[:100]))
     elif persist and cmd_like and (egress or stage): out.append(('command that changes a login or startup file', line.strip()[:100]))
-    if PIPE_TO_SHELL.search(line): out.append(('command that pipes a download into a shell', line.strip()[:100]))
+    pm = PIPE_TO_SHELL.search(line)
+    if pm and not NEGATION_BEFORE.search(line[:pm.start()]) and not NEGATION_BEFORE.search(line[pm.end():]): out.append(('command that pipes a download into a shell', line.strip()[:100]))
     return out
 
 

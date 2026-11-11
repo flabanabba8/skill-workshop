@@ -6,13 +6,14 @@ curated: 2026-11-11
 
 Read this index on first use, then only the part you need. This wiki ships inside
 the plugin. It equips the host model with domain knowledge; it is not a separate
-LLM service. Skill Workshop is three parts in one plugin; each part keeps its own
+LLM service. Skill Workshop is four parts in one plugin; each part keeps its own
 tools, skill and wiki.
 
 | Part | Use it to | Skill | Wiki |
 |---|---|---|---|
 | Skill Miner | find a workflow you repeat in past sessions and draft a skill from it | `skill-miner` | [skill-miner/index.md](skill-miner/index.md) |
 | First Principles Skill Builder | build or fix a skill from a description so it fits the machine you have | `first-principles-skill-builder` | [first-principles-skill-builder/index.md](first-principles-skill-builder/index.md) |
+| Skill Guard | scan every skill before it is installed or used, including ones from other people | `skill-guard` | [skill-guard/index.md](skill-guard/index.md) |
 | Taint Shield | stop instructions hidden in web pages, files and imported skills from becoming actions | `taint-shield` | [taint-shield/index.md](taint-shield/index.md) |
 
 All registered tools: [tools.md](tools.md).

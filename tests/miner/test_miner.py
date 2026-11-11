@@ -39,6 +39,66 @@ def make_db(path, flaky_every=0, wrapped=False):
     con.commit(); con.close()
 
 
+def make_chore_db(path):
+    """Eight chats; every one opens with the same housekeeping calls. Four repeat one chore (meeting notes -> action list)."""
+    con = sqlite3.connect(path)
+    con.execute('CREATE TABLE sessions (id TEXT, started_at REAL)'); con.execute('CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, tool_name TEXT, tool_call_id TEXT)')
+    now = time.time(); n = 0
+
+    def call(sid, tool, args, result):
+        nonlocal n; n += 1; cid = f'c{n}'
+        con.execute('INSERT INTO messages (session_id, role, tool_calls) VALUES (?,?,?)', (sid, 'assistant', json.dumps([{'id': cid, 'function': {'name': tool, 'arguments': json.dumps(args)}}])))
+        con.execute('INSERT INTO messages (session_id, role, content, tool_name, tool_call_id) VALUES (?,?,?,?,?)', (sid, 'tool', json.dumps(result), tool, cid))
+    ok = {'output': 'ok', 'exit_code': 0}
+    asks = ['Turn my meeting notes from Monday into an action list', 'Please turn the meeting notes into an action list with owners', 'Can you turn these meeting notes into an action list', 'Turn the meeting notes for the budget call into an action list']
+    others = ['Find a good ramen place', 'What changed in the python release', 'Summarise this article for me', 'Look up the weather for Friday']
+    for i, ask in enumerate(asks + others):
+        sid = f'c{i}'; con.execute('INSERT INTO sessions VALUES (?,?)', (sid, now - 1000 + i))
+        con.execute('INSERT INTO messages (session_id, role, content) VALUES (?,?,?)', (sid, 'user', ask))
+        call(sid, 'skills_list', {}, {'skills': []}); call(sid, 'search_files', {'pattern': '*.md'}, {'files': []}); call(sid, 'skill_view', {'name': 'notes'}, {'success': True})
+        if i < 4:
+            call(sid, 'read_file', {'path': f'/home/someone/notes/meeting{i}.md'}, {'content': 'x'}); call(sid, 'write_file', {'path': f'/home/someone/notes/actions{i}.md', 'content': '- a'}, {'success': True})
+        else:
+            call(sid, 'web_search', {'q': ask}, {'results': []}); call(sid, 'web_extract', {'url': f'https://e{i}.example'}, {'content': 'x'}); call(sid, 'read_file', {'path': f'/tmp/other{i}.txt'}, {'content': 'x'})
+    con.commit(); con.close()
+
+
+class ChoreNotHousekeeping(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.db = str(Path(self.tmp.name) / 'chores.db'); make_chore_db(self.db)
+        self.sessions = core.load(self.db, 30); self.found = core.mine(self.sessions, min_support=3, lo=3, hi=6)
+    def tearDown(self): self.tmp.cleanup()
+
+    def test_four_chats_of_one_chore_each_opening_with_the_same_housekeeping_yield_the_chore(self):
+        top = self.found[0]
+        self.assertEqual(top['steps'], ['read_file', 'write_file']); self.assertEqual(top['sessions'], 4); self.assertEqual(top['verdict'], 'recommend')
+        self.assertGreaterEqual(top['holdout_hits'], 1)
+        for p in self.found: self.assertFalse(any(core.is_housekeeping(t) for t in p['steps']), p['steps'])
+        self.assertTrue({'meeting', 'notes', 'action', 'list'} <= set(top['request_terms'])); self.assertEqual(top['file_types'], ['md'])
+        self.assertIn('skills_list', top['housekeeping_skipped'])
+
+    def test_housekeeping_alone_never_forms_a_pattern(self):
+        hk = [{**s, 'steps': [x for x in s['steps'] if core.is_housekeeping(x['token'])]} for s in self.sessions]
+        self.assertEqual(core.mine(hk, min_support=3, lo=3, hi=6), [])
+
+    def test_skill_is_named_and_described_from_the_request_not_the_tool_names(self):
+        name, text = core.draft(self.found[0], self.sessions, self.db)
+        self.assertRegex(name, core.NAME); self.assertIn('meeting', name); self.assertIn('notes', name); self.assertNotIn('skills', name); self.assertNotIn('workflow', name)
+        fm = core.frontmatter(text); self.assertIn('meeting notes', fm['description'].lower()); self.assertTrue(30 <= len(fm['description']) <= 500)
+        self.assertIn('`read_file`', text); self.assertIn('`write_file`', text); self.assertNotIn('1. `skills_list`', text); self.assertIn('housekeeping', text)
+        self.assertNotIn('/home/someone', text)
+
+    def test_held_out_check_and_replay_still_apply_to_the_chore(self):
+        props = core.Proposals(Path(self.tmp.name) / 'p'); top = self.found[0]; name, text = core.draft(top, self.sessions, self.db)
+        pid = props.save(name, text, {k: v for k, v in top.items() if not k.startswith('_')} | {'support_sessions': top['_support'], 'holdout_sessions': top['_hold']})
+        n, ev, sup, hold = core.context(props, pid, self.db); result = core.check(n, text, ev, sup, hold)
+        self.assertTrue([c for c in result['checks'] if c['check'] == 'holdout_replay'][0]['ok']); self.assertTrue(result['passed'], result)
+
+    def test_a_chore_with_no_write_step_and_no_shared_wording_is_not_promoted_from_two_steps(self):
+        sess = [{'id': f's{i}', 'request': f'unrelated thing {i}', 'steps': [{'token': 'read_file', 'failed': False, 'args': {}}, {'token': 'web_search', 'failed': False, 'args': {}}]} for i in range(6)]
+        self.assertEqual(core.mine(sess, min_support=3, lo=3, hi=6), [])
+
+
 class MinerTests(unittest.TestCase):
     def setUp(self): self.tmp = tempfile.TemporaryDirectory(); self.db = str(Path(self.tmp.name) / 'state.db'); make_db(self.db)
     def tearDown(self): self.tmp.cleanup()
