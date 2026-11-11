@@ -201,6 +201,16 @@ class Guard:
         if not isinstance(res, dict) or not res.get('success'): return None
         name = str(res.get('name') or (args or {}).get('name') or 'skill')
         sd = res.get('skill_dir')
+        # Hermes omits skill_dir for linked-file views. Use the directory decision only
+        # when the returned local file is exactly the file whose version was approved.
+        if not sd and ':' not in name and isinstance(res.get('file'), str) and isinstance(res.get('content'), str):
+            candidate = locate(name, self._roots())
+            if candidate:
+                try:
+                    file = (candidate / res['file']).resolve()
+                    if file.is_relative_to(candidate.resolve()) and file.read_text(encoding='utf-8') == res['content']:
+                        sd = candidate
+                except (OSError, ValueError): pass
         if sd and Path(sd).is_dir(): r = self.d.check_dir(sd, name)
         elif isinstance(res.get('content'), str): r = self.d.check_text(res['content'], name)
         else: return None

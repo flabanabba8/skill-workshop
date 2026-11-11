@@ -66,11 +66,25 @@ def readable(text):
 
 
 def normalise(text):
-    return re.sub(r'\s+', ' ', _INVISIBLE.sub('', html.unescape(text)).strip().lower())
+    return re.sub(r'\s+', ' ', re.sub(r'\\\s*\n\s*', ' ', _INVISIBLE.sub('', html.unescape(text))).strip().lower())
+
+
+def json_strings(value):
+    if isinstance(value, str): yield value
+    elif isinstance(value, dict):
+        for item in value.values(): yield from json_strings(item)
+    elif isinstance(value, list):
+        for item in value: yield from json_strings(item)
 
 
 def command_lines(text):
-    text = _INVISIBLE.sub('', html.unescape(text))
+    text = re.sub(r'\\\s*\n\s*', ' ', _INVISIBLE.sub('', html.unescape(text)))
+    # Preserve Markdown image/link labels and scan values of complete JSON lines.
+    text = re.sub(r'!?\[([^]\n]+)\]\([^\n)]*\)', r'\1', text)
+    for line in text.splitlines():
+        try: value = json.loads(line)
+        except (ValueError, TypeError): continue
+        if isinstance(value, (dict, list)): text += '\n' + '\n'.join(json_strings(value))
     found = {normalise(m) for m in COMMAND_LINE.findall(text)}
     text = text.replace('<!--', '').replace('-->', '')
     text = _TAGS.sub('', text)
@@ -137,16 +151,20 @@ class Shield:
 
     def trusted(self, key, v):
         v = v.lower(); u = self.s(key)['user_values']
-        if v.startswith(('http://', 'https://')): return v in u or self.trusted(key, host_of(v))
+        if v.startswith(('http://', 'https://')): return v in u or v in self.persistent_trust or self.trusted(key, host_of(v))
         return v in u or v in self.persistent_trust or any(v == t or v.endswith('.' + t) for t in self.persistent_trust)
 
     def check(self, tool_name, args, **kw):
         key = sid(kw); s = self.s(key)
-        if tool_name == 'shield_trust': return {'action': 'approve', 'message': 'Taint Shield: this adds a destination to the trusted list. Content from the web must not be able to do that, so a person must confirm.', 'rule_key': 'shield-trust'}
+        if tool_name == 'shield_trust':
+            value = re.sub(r'[\x00-\x1f\x7f]', '', str(args.get('value', '')))[:200]
+            return {'action': 'approve', 'message': f'Taint Shield: add {value!r} to the trusted list. Content from the web must not be able to do that, so a person must confirm.', 'rule_key': 'shield-trust'}
         if tool_name not in SENSITIVE_TOOLS and not MESSAGE_TOOLS.search(tool_name): return None
         if tool_name.startswith('shield_'): return None
         text = flatten(args); low = text.lower()
-        found = [(k, v) for k, v in values_in(text) if v in s['tainted'] and not self.trusted(key, v)]
+        # An exact trusted URL must not be re-flagged via its separately extracted host.
+        untrusted_text = URL.sub(lambda m: '' if self.trusted(key, m.group(0).rstrip('.,;')) else m.group(0), text)
+        found = [(k, v) for k, v in values_in(untrusted_text) if v in s['tainted'] and not self.trusted(key, v)]
         cmds = [c for c in s['tainted_cmds'] if c in normalise(text) and not any(c in u for u in s['user_commands'])]
         egress = bool(EGRESS.search(text)) or bool(MESSAGE_TOOLS.search(tool_name)) or tool_name in ('browser_navigate', 'browser_type')
         flagged = bool(s['flags'])
