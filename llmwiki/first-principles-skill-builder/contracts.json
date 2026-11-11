@@ -1,0 +1,135 @@
+{
+  "status": "actual registered source schemas; handlers not executed for schema capture",
+  "tools": [
+    {
+      "name": "skillbuilder_resources",
+      "description": "Report this machine's CPU, RAM, free disk, GPU (NVIDIA via nvidia-smi), common executables with versions, cached model names, and the host's registered tools and skills. Names only: loads no model, reads no credentials.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "include_model_cache": {
+            "type": "boolean"
+          },
+          "extra_executables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "skillbuilder_save",
+      "description": "Save a draft SKILL.md as a new numbered revision under the plugin data folder. Never overwrites an earlier revision and installs nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "skillbuilder_check",
+      "description": "Check a saved draft revision (or unsaved text) and report each check separately with offending lines: frontmatter, description quality, size, personal paths, provider ids, acceptance, degraded mode, retired workflows, harness neutrality, side effects, referenced files and tools, and recorded contrasting cases.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "base_dir": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "skillbuilder_case",
+      "description": "Record your walk-through of one contrasting case for a draft revision: limited-offline, capable-gpu-cached or hosted-selected. Returns which cases are still missing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "case": {
+            "type": "string",
+            "enum": [
+              "limited-offline",
+              "capable-gpu-cached",
+              "hosted-selected"
+            ]
+          },
+          "walkthrough": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "works",
+              "degraded",
+              "blocked"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "case",
+          "walkthrough",
+          "verdict"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "skillbuilder_install",
+      "description": "Install a checked draft revision as a skill. Refuses failing checks, missing contrasting cases and overwrites, and always requires a person to confirm.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

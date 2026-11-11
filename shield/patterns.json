@@ -1,0 +1,22 @@
+{
+  "phrases": [
+    "ignore (all |any |the )?(previous|prior|above|earlier) (instructions|directions|rules)",
+    "disregard (all |any |the )?(previous|prior|above) ",
+    "you (must|should|will) now ",
+    "new (system )?instructions?:",
+    "do not (tell|inform|mention|alert|show) (the )?user",
+    "(don't|do not) (tell|let) (the )?user",
+    "system prompt",
+    "(send|email|post|upload|exfiltrate|forward) .{0,80}(to|at) .{0,60}(@|https?://)",
+    "\\bassistant:\\s",
+    "as an ai (agent|assistant) you",
+    "<\\s*(system|instructions?)\\s*>",
+    "before (answering|responding|continuing),? (first )?(run|execute|call|send)",
+    "<\\|(?:im_start|start_header_id)\\|>\\s*(?:system|developer|assistant)",
+    "\\[(?:SYSTEM|INST)\\]",
+    "(?:override|replace|supersede) (?:the |all |your )?(?:system|developer|safety) (?:prompt|instructions?|rules)",
+    "(?:this|the following) (?:page|document|message) (?:has|takes) (?:higher|highest) priority",
+    "(?:disable|bypass|turn off) (?:your |the )?(?:safety|security|approval) (?:checks?|rules?|guardrails?)"
+  ],
+  "secret_path": "(~|\\$HOME|/home/[^/\\s]+|/root)/(\\.ssh|\\.aws|\\.gnupg|\\.config/gcloud|\\.docker|\\.kube|\\.netrc|\\.env\\b|\\.hermes)|(^|[\\s\"\\'/])\\.env(\\.\\w+)?\\b|id_(rsa|ed25519)|credentials(\\.json)?\\b|secrets?\\.(json|ya?ml|env)|\\bprintenv\\b|\\benv\\s*\\||\\$\\{?[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)\\b"
+}

@@ -1,0 +1,129 @@
+{
+  "status": "actual registered source schemas; handlers not executed for schema capture",
+  "tools": [
+    {
+      "name": "miner_scan",
+      "description": "Scan recent sessions (tool names and counts only) for tool workflows you repeat, and check each against sessions held out of the mining. Returns ranked patterns with support, held-out hits and consistency.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "min_support": {
+            "type": "integer",
+            "minimum": 2
+          },
+          "min_steps": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 6
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "miner_propose",
+      "description": "Draft a skill for one scanned pattern, using abstracted examples and up to three of your original request texts (redacted). Saves a proposal; installs nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "miner_diagnose",
+      "description": "Return bounded, redacted diagnosis context for one proposal or revision: the unchanged mining verdict and numbers, structural problems in the draft, and where its supporting sessions hit errors or retries. Reads only that proposal's own sessions. For the host agent to reason over; installs and changes nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "proposal_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "miner_refine",
+      "description": "Save your revised SKILL.md text as a new numbered revision next to the original proposal, which is never modified. Rejects retired workflows. Nothing is installed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "skill_text": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "skill_text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "miner_check",
+      "description": "Run deterministic checks on a revision (default latest; 0 is the original) and store the result: frontmatter, retired policy, leaked values, tools seen in the mined sessions, and a replay of its step order on held-out sessions. Not a quality guarantee; a weak mining verdict stays weak.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "proposal_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "miner_install",
+      "description": "Install a proposal as a skill (the latest revision if any exist, or the given one; 0 is the original). A revision must have passed miner_check unchanged. Refuses to overwrite an existing skill and always requires a person to confirm.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "proposal_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
