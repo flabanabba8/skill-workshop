@@ -29,7 +29,7 @@ Inputs: `name` (required), `revision` (optional), `case` (required, one of limit
 
 ## skillbuilder_install
 
-Install a checked draft revision as a skill. Refuses failing checks, missing contrasting cases and overwrites, and always requires a person to confirm.
+Install a checked draft revision as a skill. Refuses failing checks, missing contrasting cases and overwrites. The draft is scanned for prompt injection first and is refused, with the findings listed by line, unless `allow_findings` is true (a person is then shown the findings). Always requires a person to confirm.
 
-Inputs: `name` (required), `revision` (optional).
+Inputs: `name` (required), `revision` (optional), `allow_findings` (optional).
 

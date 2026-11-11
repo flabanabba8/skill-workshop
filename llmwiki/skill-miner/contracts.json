@@ -107,7 +107,7 @@
     },
     {
       "name": "miner_install",
-      "description": "Install a proposal as a skill (the latest revision if any exist, or the given one; 0 is the original). A revision must have passed miner_check unchanged. Refuses to overwrite an existing skill and always requires a person to confirm.",
+      "description": "Install a proposal as a skill (the latest revision if any exist, or the given one; 0 is the original). A revision must have passed miner_check unchanged. The draft is scanned for prompt injection first and is refused, with the findings listed by line, unless allow_findings is true (a person is then shown the findings). Refuses to overwrite an existing skill and always requires a person to confirm.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -117,6 +117,9 @@
           "revision": {
             "type": "integer",
             "minimum": 0
+          },
+          "allow_findings": {
+            "type": "boolean"
           }
         },
         "required": [

@@ -105,8 +105,10 @@ mocked check is not a live quality review; say which parts were never run.
 
 Report the skill's location, the checks actually run, resource choices and open
 limits. Keep automatic discovery on unless the user asks for manual-only use.
-Installing is separate: `skillbuilder_install` asks a person to confirm, refuses
-failing checks, missing cases and overwrites. Permission to make a local skill is
+Installing is separate: `skillbuilder_install` scans the draft for prompt injection,
+asks a person to confirm, refuses failing checks, missing cases and overwrites. If the
+scan refuses with findings, show each one (file and line) and fix the draft; pass
+`allow_findings` only when the user has read them and says to install anyway. Permission to make a local skill is
 not permission to publish or distribute private sources.
 
 ## Acceptance for this skill's own work

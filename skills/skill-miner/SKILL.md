@@ -37,6 +37,10 @@ checks.
 A local refined draft and its checks need no user approval. Install does:
 `miner_install` takes the latest revision, only if it passed `miner_check`
 unchanged, and always asks a person to confirm; offer it, do not do it silently.
+The draft is scanned for prompt injection first. If the install comes back refused with
+findings, show the user each finding (file and line), fix the draft with `miner_refine`
+and `miner_check`, and try again. Use `allow_findings` only if the user has read the
+findings and says to install anyway; a person is then asked to approve with the findings shown.
 
 ## Honesty rules
 

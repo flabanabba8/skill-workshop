@@ -13,7 +13,7 @@ Show what Taint Shield has seen in a session. Inputs: `session_id` (optional).
 
 ## shield_scan
 
-Scan text for URLs, addresses, command lines and injection-like phrases without changing anything. Inputs: `text` (required).
+Scan text for URLs, addresses, command lines and injection-like phrases without changing anything, or scan a skill file or folder (`path`) for prompt injection before you install it. Inputs: `text` or `path`.
 
 ## shield_trust
 
@@ -41,7 +41,7 @@ Run deterministic checks on a revision and store the result. Inputs: `proposal_i
 
 ## miner_install
 
-Install a proposal as a skill. Always requires a person to confirm. Inputs: `proposal_id` (required), `revision` (optional).
+Install a proposal as a skill, after a prompt-injection scan of the draft. Always requires a person to confirm. Inputs: `proposal_id` (required), `revision`, `allow_findings` (optional).
 
 ## skillbuilder_resources
 

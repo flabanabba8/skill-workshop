@@ -4,6 +4,8 @@
 
 Get new skills for Hermes safely: mine them from your past chats, build them from a description, and guard against prompt injection in skills and content you bring in.
 
+**New in 0.2.0:** every skill is checked for prompt injection before it is installed, whether Skill Miner mined it or Skill Builder built it. If the check finds hidden text, instructions aimed at your agent, or commands that send secrets out, the skill is not installed and you get each finding with its line number. You can also ask Hermes to check a skill you downloaded (a file or a folder) before you install it.
+
 **At a glance**
 
 - **Who it is for:** people who want their Hermes agent to learn new skills, and who worry about what an imported skill or a web page could make the agent do.
@@ -11,7 +13,7 @@ Get new skills for Hermes safely: mine them from your past chats, build them fro
 - **Needs:** Hermes 0.22 or later. No API keys, no extra tools, no Python packages. Skill Miner needs some past Hermes sessions to look at.
 - **Internet:** nothing. None of the three parts makes a network call or a model call of its own.
 - **Platform:** Linux is the only platform checked.
-- **Safety:** nothing is installed as a skill without a person confirming, and the Shield only blocks or asks; it never bypasses a Hermes approval.
+- **Safety:** every skill is scanned for prompt injection before install (a plain pattern check, not proof), and nothing is installed as a skill without a person confirming, and the Shield only blocks or asks; it never bypasses a Hermes approval.
 
 ## The three parts
 
@@ -61,7 +63,8 @@ Text the agent reads from the web, a browser, mail or similar sources is untrust
 1. URLs, domains and addresses in your own messages are trusted for that session.
 2. Output from tools whose names look like web, browser, fetch, mail, search, scrape, download and similar is untrusted; its URLs, domains, emails, IPs and command lines become tainted. Output with instruction-like phrases gets a one-line warning appended.
 3. Before a sensitive tool runs (terminal, execute_code, send/post/email tools, write_file, patch, browser navigation or typing) its arguments are checked. It **blocks** reading local secrets and sending them out, editing login or startup files after untrusted content was read, running a command line copied from untrusted output, and using a tainted destination after an injection-like phrase. It **asks a person** before using a destination that appeared only in untrusted output. Everything else is untouched.
-4. `shield_trust` adds a permanent trusted destination and always requires a person's approval, so injected text cannot trust itself. `shield_report` shows sources, flags and decisions per session; `shield_scan` analyses any text without changing anything.
+4. `shield_trust` adds a permanent trusted destination and always requires a person's approval, so injected text cannot trust itself. `shield_report` shows sources, flags and decisions per session; `shield_scan` analyses any text without changing anything, and with `path` it checks a skill file or folder you downloaded.
+5. **Scan before install.** `miner_install` and `skillbuilder_install` scan the full draft first, using the Shield's own detection, line by line. A clean skill installs and the result says `scanned for prompt injection: no findings`. If anything is found (injection-like instructions, hidden zero-width text or instructions in an HTML comment, a command that sends or copies a secret or changes a login file, a download piped into a shell) nothing is installed and the result lists each finding with its line and how to go on: fix the draft, or repeat the install with `allow_findings` set, which still asks a person to approve and shows the findings in the approval text. Ordinary shell steps in a skill's own instructions are not flagged. The scan is on the same heuristic footing as the rest of the Shield: it reads only the draft's `SKILL.md` (the only file these two tools install), and a rephrased or encoded injection can slip past it.
 
 Limits: this is heuristic provenance, not proof. It matches literal values, so an injection that makes the model rephrase or encode a destination can slip past; commands you also wrote are trusted; it only watches tools it recognises by name. It reduces risk, it does not make an agent safe to run on hostile content. It adds vetoes and approval requests only and bypasses no approval. Block rules are tuned on a small hand-written corpus, not a benchmark.
 

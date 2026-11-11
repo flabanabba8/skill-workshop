@@ -7,9 +7,14 @@ def _store():
     return core.Drafts(part_data_dir('first-principles-skill-builder') / 'drafts')
 
 
-def on_pre_tool_call(tool_name='', **kwargs):
+def on_pre_tool_call(tool_name='', args=None, **kwargs):
     if tool_name == 'skillbuilder_install':
-        return {'action': 'approve', 'message': 'First Principles Skill Builder: this installs a checked draft into your skills folder. A person must read the draft and confirm.', 'rule_key': 'skillbuilder-install'}
+        from .. import skillscan
+        args = args or {}; findings = []
+        try:
+            _, rd = _store().get(args['name'], args.get('revision')); findings = skillscan.scan_skill((rd / 'SKILL.md').read_text(encoding='utf-8'))
+        except (ValueError, TypeError, OSError, KeyError, ImportError): pass  # the install itself reports a bad draft
+        return skillscan.install_gate(findings, bool(args.get('allow_findings')), 'First Principles Skill Builder: this installs a checked draft into your skills folder. A person must read the draft and confirm.', 'skillbuilder-install')
     return None
 
 
@@ -33,7 +38,7 @@ def invoke(name, args):
             return json.dumps({'name': args['name'], 'revision': n, 'recorded': args['case'], 'cases_missing': missing})
         if name == 'skillbuilder_install':
             from hermes_constants import get_hermes_home
-            return json.dumps(s.install(args['name'], args.get('revision'), get_hermes_home() / 'skills'))
+            return json.dumps(s.install(args['name'], args.get('revision'), get_hermes_home() / 'skills', bool(args.get('allow_findings'))))
         raise ValueError('unknown tool')
     except (ValueError, TypeError, OSError, KeyError, ImportError) as exc:
         return json.dumps({'error': str(exc)})
@@ -46,7 +51,7 @@ TOOLS = {
     'skillbuilder_save': ('Save a draft SKILL.md as a new numbered revision under the plugin data folder. Never overwrites an earlier revision and installs nothing.', {'name': S, 'text': S, 'note': S}, ['name', 'text']),
     'skillbuilder_check': ('Check a saved draft revision (or unsaved text) and report each check separately with offending lines: frontmatter, description quality, size, personal paths, provider ids, acceptance, degraded mode, retired workflows, harness neutrality, side effects, referenced files and tools, and recorded contrasting cases.', {'name': S, 'revision': REV, 'text': S, 'base_dir': S}, []),
     'skillbuilder_case': ('Record your walk-through of one contrasting case for a draft revision: limited-offline, capable-gpu-cached or hosted-selected. Returns which cases are still missing.', {'name': S, 'revision': REV, 'case': {'type': 'string', 'enum': list(core.CASES)}, 'walkthrough': S, 'verdict': {'type': 'string', 'enum': list(core.VERDICTS)}}, ['name', 'case', 'walkthrough', 'verdict']),
-    'skillbuilder_install': ('Install a checked draft revision as a skill. Refuses failing checks, missing contrasting cases and overwrites, and always requires a person to confirm.', {'name': S, 'revision': REV}, ['name']),
+    'skillbuilder_install': ('Install a checked draft revision as a skill. Refuses failing checks, missing contrasting cases and overwrites. The draft is scanned for prompt injection first and is refused, with the findings listed by line, unless allow_findings is true (a person is then shown the findings). Always requires a person to confirm.', {'name': S, 'revision': REV, 'allow_findings': {'type': 'boolean'}}, ['name']),
 }
 
 

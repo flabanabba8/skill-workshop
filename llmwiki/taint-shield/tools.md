@@ -10,9 +10,9 @@ Inputs: `session_id` (optional).
 
 ## shield_scan
 
-Scan a piece of text for URLs, addresses, command lines and injection-like phrases without changing anything.
+Scan a piece of text for URLs, addresses, command lines and injection-like phrases without changing anything. Or give `path` (a downloaded skill file or folder) to check a skill, and its bundled text files, for prompt injection before installing it: findings come back by file and line.
 
-Inputs: `text` (required).
+Inputs: `text` or `path` (give one).
 
 ## shield_trust
 

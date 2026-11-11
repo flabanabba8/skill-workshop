@@ -211,16 +211,19 @@ class Drafts:
         rows.append(_row('contrasting_cases', 'warn' if missing else 'pass', f'walk-throughs still missing: {missing}' if missing else 'all three contrasting cases recorded for this revision'))
         return n, rows, missing
 
-    def install(self, name, revision, skills_dir):
+    def install(self, name, revision, skills_dir, allow_findings=False):
+        from .. import skillscan
         n, rows, missing = self.check(name, revision)
         failed = [r['check'] for r in rows if r['status'] == 'fail']
         if failed: raise ValueError(f'Refusing to install: failing checks {failed}')
         if missing: raise ValueError(f'Refusing to install: contrasting cases missing {missing}')
         _, rd = self.get(name, n); text = (rd / 'SKILL.md').read_text(encoding='utf-8'); require_current_workflow(name, text)
+        findings = skillscan.scan_skill(text)
+        if findings and not allow_findings: raise ValueError(skillscan.refusal(findings))
         target = Path(skills_dir) / name
         if target.exists(): raise ValueError(f'A skill named {name} already exists; nothing was changed')
         target.mkdir(parents=True); (target / 'SKILL.md').write_text(text, encoding='utf-8')
-        return {'installed': str(target / 'SKILL.md'), 'name': name, 'revision': n}
+        return {'installed': str(target / 'SKILL.md'), 'name': name, 'revision': n, 'prompt_injection_scan': {'findings': findings, 'summary': skillscan.CLEAN if not findings else f'installed with {len(findings)} finding(s) after the requester asked to and a person approved'}}
 
 
 def summary(rows):

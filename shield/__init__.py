@@ -27,8 +27,14 @@ def on_pre_tool_call(tool_name='', args=None, **kwargs): return shield().check(t
 
 def invoke(name, args, **ctx):
     try:
+        if name == 'shield_scan' and args.get('path'):
+            from .. import skillscan
+            r = skillscan.scan_path(args['path']); r['summary'] = skillscan.CLEAN if not r['findings'] else f"{len(r['findings'])} finding(s); do not install this skill until each is understood"
+            return json.dumps(r)
         sh = shield()
-        if name == 'shield_scan': return json.dumps(sh.scan(args['text']))
+        if name == 'shield_scan':
+            if not isinstance(args.get('text'), str): raise ValueError('give text, or path to a skill file or folder')
+            return json.dumps(sh.scan(args['text']))
         if name == 'shield_trust': return json.dumps(sh.trust(args['value']))
         return json.dumps(sh.report(args.get('session_id') or ctx.get('session_id') or ctx.get('task_id')))
     except (ValueError, TypeError, OSError, KeyError) as exc:
@@ -38,7 +44,7 @@ def invoke(name, args, **ctx):
 S = {'type': 'string'}
 TOOLS = {
     'shield_report': ('Show what Taint Shield has seen in a session: untrusted sources, injection-like phrases and the actions it blocked or sent for approval.', {'session_id': S}, []),
-    'shield_scan': ('Scan a piece of text for URLs, addresses, command lines and injection-like phrases without changing anything.', {'text': S}, ['text']),
+    'shield_scan': ('Scan a piece of text for URLs, addresses, command lines and injection-like phrases without changing anything. Or give path (a downloaded skill file or folder) to check a skill, and its bundled text files, for prompt injection before installing it: findings come back by file and line.', {'text': S, 'path': S}, []),
     'shield_trust': ('Add a domain, address or URL to the permanent trusted list. Always requires a person to confirm.', {'value': S}, ['value']),
 }
 

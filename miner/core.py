@@ -364,8 +364,13 @@ class Proposals:
         rd = self.dir(proposal_id) / 'revisions'; rd.mkdir(mode=0o700, exist_ok=True)
         (rd / f'r{n}.check.json').write_text(json.dumps({'revision': n, 'sha256': sha(text), **result}, indent=1), encoding='utf-8')
 
-    def install(self, proposal_id, skills_dir, revision=None):
+    def pick(self, proposal_id, revision=None):
         name, original = self.get(proposal_id); n, text = self.revision(proposal_id, revision) if (revision is not None or self.revisions(proposal_id)) else (0, original)
+        return name, n, text
+
+    def install(self, proposal_id, skills_dir, revision=None, allow_findings=False):
+        from .. import skillscan
+        name, n, text = self.pick(proposal_id, revision)
         if n:
             f = self.dir(proposal_id) / 'revisions' / f'r{n}.check.json'
             rec = json.loads(f.read_text(encoding='utf-8')) if f.is_file() else None
@@ -373,7 +378,9 @@ class Proposals:
             if not rec.get('passed'): raise ValueError(f'Revision {n} failed its checks; refine it and check again. Nothing was changed')
         if not NAME.match(name): raise ValueError('Proposal name is not a valid skill name')
         require_current_workflow(name, text)
+        findings = skillscan.scan_skill(text)
+        if findings and not allow_findings: raise ValueError(skillscan.refusal(findings))
         target = Path(skills_dir) / name
         if target.exists(): raise ValueError(f'A skill named {name} already exists; nothing was changed')
         target.mkdir(parents=True); (target / 'SKILL.md').write_text(text, encoding='utf-8')
-        return {'installed': str(target / 'SKILL.md'), 'name': name, 'revision': n}
+        return {'installed': str(target / 'SKILL.md'), 'name': name, 'revision': n, 'prompt_injection_scan': {'findings': findings, 'summary': skillscan.CLEAN if not findings else f'installed with {len(findings)} finding(s) after the requester asked to and a person approved'}}

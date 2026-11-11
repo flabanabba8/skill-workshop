@@ -11,9 +11,14 @@ def _paths():
     return str(home / 'state.db'), core.Proposals(part_data_dir('skill-miner') / 'proposals'), home / 'skills'
 
 
-def on_pre_tool_call(tool_name='', **kwargs):
+def on_pre_tool_call(tool_name='', args=None, **kwargs):
     if tool_name == 'miner_install':
-        return {'action': 'approve', 'message': 'Skill Miner: this installs a mined skill into your skills folder. A person must read the draft (or the checked revision) and confirm.', 'rule_key': 'miner-install'}
+        from .. import skillscan
+        args = args or {}; findings = []
+        try:
+            _, props, _ = _paths(); _, _, text = props.pick(args['proposal_id'], args.get('revision')); findings = skillscan.scan_skill(text)
+        except (ValueError, TypeError, OSError, KeyError, ImportError): pass  # the install itself reports a bad proposal
+        return skillscan.install_gate(findings, bool(args.get('allow_findings')), 'Skill Miner: this installs a mined skill into your skills folder. A person must read the draft (or the checked revision) and confirm.', 'miner-install')
     return None
 
 
@@ -40,7 +45,7 @@ def invoke(name, args):
             rev, text = props.revision(args['proposal_id'], args.get('revision'))
             n, ev, sup, hold = core.context(props, args['proposal_id'], db); result = core.check(n, text, ev, sup, hold); props.save_check(args['proposal_id'], rev, text, result)
             return json.dumps({'proposal_id': args['proposal_id'], 'revision': rev, **result})
-        return json.dumps(props.install(args['proposal_id'], skills, args.get('revision')))
+        return json.dumps(props.install(args['proposal_id'], skills, args.get('revision'), bool(args.get('allow_findings'))))
     except (ValueError, TypeError, OSError, KeyError, ImportError) as exc:
         return json.dumps({'error': str(exc)})
 
@@ -53,7 +58,7 @@ TOOLS = {
     'miner_diagnose': ('Return bounded, redacted diagnosis context for one proposal or revision: the unchanged mining verdict and numbers, structural problems in the draft, and where its supporting sessions hit errors or retries. Reads only that proposal\'s own sessions. For the host agent to reason over; installs and changes nothing.', {'proposal_id': S, 'revision': I0}, ['proposal_id']),
     'miner_refine': ('Save your revised SKILL.md text as a new numbered revision next to the original proposal, which is never modified. Rejects retired workflows. Nothing is installed.', {'proposal_id': S, 'skill_text': S, 'notes': S, 'name': {'type': 'string', 'description': 'Optional: a human skill name for this proposal (lowercase letters, digits, hyphens), replacing the generated tool-list name. The SKILL.md frontmatter name must match it.'}}, ['proposal_id', 'skill_text']),
     'miner_check': ('Run deterministic checks on a revision (default latest; 0 is the original) and store the result: frontmatter, retired policy, leaked values, tools seen in the mined sessions, and a replay of its step order on held-out sessions. Not a quality guarantee; a weak mining verdict stays weak.', {'proposal_id': S, 'revision': I0}, ['proposal_id']),
-    'miner_install': ('Install a proposal as a skill (the latest revision if any exist, or the given one; 0 is the original). A revision must have passed miner_check unchanged. Refuses to overwrite an existing skill and always requires a person to confirm.', {'proposal_id': S, 'revision': I0}, ['proposal_id']),
+    'miner_install': ('Install a proposal as a skill (the latest revision if any exist, or the given one; 0 is the original). A revision must have passed miner_check unchanged. The draft is scanned for prompt injection first and is refused, with the findings listed by line, unless allow_findings is true (a person is then shown the findings). Refuses to overwrite an existing skill and always requires a person to confirm.', {'proposal_id': S, 'revision': I0, 'allow_findings': {'type': 'boolean'}}, ['proposal_id']),
 }
 
 
