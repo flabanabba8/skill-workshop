@@ -69,7 +69,7 @@ def _line_findings(line, hidden_context=False):
         m = rx.search(line)
         if m and (not p.startswith('(send|email') or SENDS_DATA.search(line)) and not _phrase_is_ordinary(rx, p, m, line): out.append(('injection-like instruction', m.group(0).strip()[:80]))
     secret, egress, stage, persist = _secret(line), sh.EGRESS.search(line), sh.STAGE.search(line), sh.PERSIST.search(line)
-    cmd_like = bool(sh.COMMAND_LINE.search(line)) or hidden_context or ('`' in line and (not secret or _in_code_span_both(line, sh.SECRET_PATH, sh.EGRESS) or _in_code_span_both(line, sh.SECRET_PATH, sh.STAGE) or _in_code_span_both(line, sh.PERSIST) or bool(re.match(r'\s*[-*>\d.)]*\s*(run|execute|then)\b', line, re.I))))
+    cmd_like = bool(sh.command_lines(line)) or hidden_context or ('`' in line and (not secret or _in_code_span_both(line, sh.SECRET_PATH, sh.EGRESS) or _in_code_span_both(line, sh.SECRET_PATH, sh.STAGE) or _in_code_span_both(line, sh.PERSIST) or bool(re.match(r'\s*[-*>\d.)]*\s*(run|execute|then)\b', line, re.I))))
     if secret and egress and cmd_like: out.append(('command that sends a local secret out', line.strip()[:100]))
     elif secret and stage and cmd_like and re.search(r'\b(cp|mv|rsync|tar|zip|7z|dd)\b', line, re.I): out.append(('command that copies a local secret', line.strip()[:100]))
     elif persist and cmd_like and (egress or stage): out.append(('command that changes a login or startup file', line.strip()[:100]))

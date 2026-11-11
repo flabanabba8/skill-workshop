@@ -1,6 +1,7 @@
 """Provenance tracking for prompt injection. Values (URLs, domains, addresses, command lines) that appear in untrusted tool output but not in
 anything the user wrote are 'tainted'; using one in a sensitive tool call is blocked or sent for approval. Heuristic, deterministic, no model."""
 import json
+import html
 import os
 from pathlib import Path
 import re
@@ -14,6 +15,14 @@ TLDS = 'com|net|org|io|dev|ai|co|xyz|ru|cn|info|biz|me|app|cloud|top|site|online
 DOMAIN = re.compile(r'(?<![\w@.-])((?:[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?\.)+(?:' + TLDS + r'))(?![\w-])', re.I)
 IPV4 = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
 COMMAND_LINE = re.compile(r'^\s*(?:\$ |# )?((?:curl|wget|nc|ncat|bash|sh|zsh|python3?|node|powershell|pwsh|rm|chmod|scp|sftp|ssh|cat|base64|tar|crontab|echo|cp|mv|rsync)\b[^\n]{4,300})$', re.M | re.I)
+# Extract commands in prose, inline code and markup as well as standalone lines.
+_BIN = r'(?:curl|wget|nc|ncat|bash|sh|zsh|python3?|node|powershell|pwsh|rm|chmod|scp|sftp|ssh|cat|base64|tar|crontab|echo|cp|mv|rsync)'
+_EMBEDDED_COMMAND = re.compile(r'(?<![\w./-])(' + _BIN + r'\b(?:\s+|\s*\|\s*)(?=[-./~@$\w])[^\n`<>]{1,300})', re.I)
+_TAGS = re.compile(r'<[^>]*>')
+_INVISIBLE = re.compile('[\u200b\u200c\u200d\u2060-\u2064\ufeff\u202a-\u202e\u2066-\u2069]')
+_END_PROSE = re.compile(r'\s+(?:before|after|then|and then|to (?:check|verify|see)|when|while|please)\b', re.I)
+
+
 _PATTERNS = json.loads((Path(__file__).with_name('patterns.json')).read_text(encoding='utf-8'))
 PHRASES = _PATTERNS['phrases']
 PHRASE_RES = [re.compile(p, re.I) for p in PHRASES]
@@ -32,6 +41,8 @@ def host_of(url):
 
 
 def values_in(text):
+    text = _INVISIBLE.sub('', html.unescape(text)).replace('<!--', '').replace('-->', '')
+    text = _TAGS.sub('', text)
     out = set()
     for u in URL.findall(text): out.add(('url', u.rstrip('.,;')))
     for u in URL.findall(text):
@@ -54,7 +65,23 @@ def readable(text):
     return re.sub(r'(?m)^\s*\d{1,6}\|', '', text)
 
 
-def command_lines(text): return {re.sub(r'\s+', ' ', m.strip().lower()) for m in COMMAND_LINE.findall(text)}
+def normalise(text):
+    return re.sub(r'\s+', ' ', _INVISIBLE.sub('', html.unescape(text)).strip().lower())
+
+
+def command_lines(text):
+    text = _INVISIBLE.sub('', html.unescape(text))
+    found = {normalise(m) for m in COMMAND_LINE.findall(text)}
+    text = text.replace('<!--', '').replace('-->', '')
+    text = _TAGS.sub('', text)
+    found |= {normalise(m) for m in COMMAND_LINE.findall(text)}
+    for match in _EMBEDDED_COMMAND.finditer(text):
+        candidate = _END_PROSE.split(match.group(1), maxsplit=1)[0].strip(' \t.,;:!?)\"\'')
+        # A binary followed by ordinary prose alone is not a shell-shaped command.
+        rest = candidate.split(None, 1)[1] if len(candidate.split(None, 1)) > 1 else ''
+        if rest and (re.search(r'(?:^|\s)[-./~@$]|[|;&=]', rest) or re.search(r'\b(?:run|execute|type|paste|use)\s*:?\s*$', text[max(0, match.start()-20):match.start()], re.I) or '`' in text[max(0, match.start()-2):match.start()]):
+            found.add(normalise(candidate))
+    return found
 
 
 def flatten(value):
@@ -85,10 +112,12 @@ class Shield:
         with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w', encoding='utf-8') as f: json.dump(sorted(self.persistent_trust), f)
         os.replace(tmp, self.trusted_file); return {'trusted': sorted(self.persistent_trust)}
 
-    def s(self, key): return self.sessions.setdefault(key, {'user_values': set(), 'tainted': {}, 'tainted_cmds': {}, 'flags': [], 'blocks': []})
+    def s(self, key): return self.sessions.setdefault(key, {'user_values': set(), 'user_commands': set(), 'tainted': {}, 'tainted_cmds': {}, 'flags': [], 'blocks': []})
 
     def note_user(self, text, **kw):
-        if isinstance(text, str): self.s(sid(kw))['user_values'] |= {v for _, v in values_in(text)}
+        if isinstance(text, str):
+            self.s(sid(kw))['user_values'] |= {v for _, v in values_in(text)}
+            self.s(sid(kw))['user_commands'].add(normalise(text))
 
     def is_untrusted_tool(self, name): return bool(UNTRUSTED_NAME.search(name)) and name not in ('shield_scan', 'shield_report', 'shield_trust')
 
@@ -118,7 +147,7 @@ class Shield:
         if tool_name.startswith('shield_'): return None
         text = flatten(args); low = text.lower()
         found = [(k, v) for k, v in values_in(text) if v in s['tainted'] and not self.trusted(key, v)]
-        cmds = [c for c in s['tainted_cmds'] if len(c) >= 12 and c in re.sub(r'\s+', ' ', low)]
+        cmds = [c for c in s['tainted_cmds'] if c in normalise(text) and not any(c in u for u in s['user_commands'])]
         egress = bool(EGRESS.search(text)) or bool(MESSAGE_TOOLS.search(tool_name)) or tool_name in ('browser_navigate', 'browser_type')
         flagged = bool(s['flags'])
         why = None; action = None

@@ -4,6 +4,8 @@
 
 Get new skills for Hermes safely. Skill Workshop scans every skill before it is installed or used, including ones from other people, and it helps you mine skills from your past chats and build them from a description.
 
+**New in 0.3.1:** Shield recognizes command-shaped instructions embedded in HTML and prose; Skill Guard names the skill and decision in approval prompts and identifies batched skill writes.
+
 **New in 0.3.0:** Skill Workshop scans every skill before it is installed or used, including ones from other people. When Hermes writes a skill, or a file in your skills folder, the new text is scanned first and you see each finding (file and line) in the approval box. When a skill is loaded, it is scanned again: a skill with hidden text, instructions aimed at your agent, or commands that send secrets out is held back from the agent, and the agent tells you and waits for your decision (approve this exact version, or quarantine it). A skill added any other way (`hermes skills install`, copying a folder in) is scanned as soon as Hermes reports it, and at its first use. Ask "scan my installed skills" to see every skill as clean or flagged, with file and line. Your decisions are remembered by a hash of the skill's files, so a clean or approved skill is not asked about again, and any change to a file is scanned again. Skill Miner now names a mined skill from what you asked, and ignores the housekeeping calls (finding a skill, searching files) that open almost every chat.
 
 **At a glance**

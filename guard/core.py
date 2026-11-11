@@ -250,7 +250,10 @@ class Guard:
         args = args or {}
         items = []; label = ''
         if tool_name == 'skill_manage':
-            items = self._writes(args); label = 'skill "%s" (skill_manage %s)' % (args.get('name', '?'), args.get('action', 'write'))
+            items = self._writes(args)
+            ops = args.get('operations') if isinstance(args.get('operations'), list) else [args]
+            names = sorted({str(op.get('name') or args.get('name')) for op in ops if isinstance(op, dict) and (op.get('name') or args.get('name'))})
+            label = 'skill(s) ' + ', '.join(json.dumps(n) for n in names) + ' (skill_manage write)' if names else 'unnamed skill (skill_manage write)'
         elif tool_name in ('write_file', 'patch') and isinstance(args.get('path'), str):
             sd, inside = skill_dir_for_path(args['path'], self._roots())
             if not inside: return None
@@ -261,7 +264,8 @@ class Guard:
         findings = []
         for fname, text in items: findings += skillscan.scan_text(text, fname)
         if not findings: return None
-        self.asked.add(str(args.get('name') or args.get('path')))
+        signature = hash_text(json.dumps(args, sort_keys=True, default=str))
+        self.asked.update((name, signature) for name in (names if tool_name == 'skill_manage' else [str(args.get('path'))]))
         return {'action': 'approve', 'message': f'Skill Workshop: Hermes is about to write {label}, and the prompt-injection scan found {len(findings)} problem(s) in the new text: ' + describe_findings(findings) + '. Approve only if you have read these lines and they are fine.', 'rule_key': 'skill-guard:findings'}
 
     def on_post_tool_call(self, tool_name, args, result):
@@ -275,8 +279,19 @@ class Guard:
             if not inst: return None
             sd = Path(inst).parent; key = 'workshop'
         elif tool_name == 'skill_manage':
-            if isinstance(result, str) and '"success": false' in result.lower().replace('"success":false', '"success": false'): return None
-            sd = locate(str(args.get('name', '')).split('/')[-1], self._roots()) ; key = str(args.get('name'))
+            try: outcome = json.loads(result) if isinstance(result, str) else result
+            except ValueError: return None
+            if not isinstance(outcome, dict) or not outcome.get('success') or outcome.get('staged'): return None
+            ops = args.get('operations') if isinstance(args.get('operations'), list) else [args]
+            names = {str(op.get('name') or args.get('name')) for op in ops if isinstance(op, dict) and (op.get('name') or args.get('name'))}
+            signature = hash_text(json.dumps(args, sort_keys=True, default=str))
+            for name in names:
+                sd = locate(name.split('/')[-1], self._roots())
+                if sd:
+                    state = self.d.check_dir(sd)['state']
+                    if (name, signature) in self.asked and state == 'flagged': self.d.decide(sd, 'approve')
+                self.asked.discard((name, signature))
+            return None
         elif tool_name in ('write_file', 'patch') and isinstance(args.get('path'), str):
             sd, inside = skill_dir_for_path(args['path'], self._roots())
             if not inside: return None
@@ -284,8 +299,9 @@ class Guard:
         else: return None
         if not sd or not Path(sd).is_dir() or not (Path(sd) / 'SKILL.md').exists(): return None
         r = self.d.check_dir(sd)
-        if r['state'] == 'flagged' and (key == 'workshop' or key in self.asked):
-            self.d.decide(sd, 'approve'); self.asked.discard(key)
+        signature = hash_text(json.dumps(args, sort_keys=True, default=str))
+        if r['state'] == 'flagged' and (key == 'workshop' or (key, signature) in self.asked):
+            self.d.decide(sd, 'approve'); self.asked.discard((key, signature))
         return None
 
     def on_skill_lifecycle(self, action, skill_name):

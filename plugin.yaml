@@ -1,5 +1,5 @@
 name: skill-workshop
-version: "0.3.0"
+version: "0.3.1"
 description: "Get new skills for Hermes safely: mine them from your past chats (Skill Miner), build them from a description (First Principles Skill Builder), and guard against prompt injection in skills and content you bring in (Taint Shield). Scans every skill before it is installed or used, including ones from other people (Skill Guard); installing your own needs your approval."
 author: "Skill Workshop contributors"
 license: GPL-3.0-or-later

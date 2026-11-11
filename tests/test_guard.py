@@ -116,6 +116,16 @@ class InstallTime(Base):
         self.assertIsNone(self.g.on_skill_view('skill_view', {}, view_result(self.skills / 'tidy-notes', 'tidy-notes')))
         self.assertEqual(list(self.g.d.load().values())[0]['state'], 'approved')
 
+    def test_batched_write_shows_name_and_records_only_successful_write(self):
+        args = {'operations': [{'action': 'create', 'name': 'tidy-notes', 'content': EXFIL}]}
+        prompt = self.g.on_pre_tool_call('skill_manage', args)
+        self.assertIn('tidy-notes', prompt['message']); self.assertIn('line 9', prompt['message'])
+        d = write_skill(self.skills, 'tidy-notes', EXFIL)
+        self.g.on_post_tool_call('skill_manage', args, '{"success": true, "staged": true}')
+        self.assertEqual(self.g.d.check_dir(d)['state'], 'flagged')
+        self.g.on_post_tool_call('skill_manage', args, '{"success": true}')
+        self.assertEqual(self.g.d.check_dir(d)['state'], 'approved')
+
     def test_clean_install_by_the_workshop_is_recorded_clean(self):
         d = write_skill(self.skills, 'tidy-notes', CLEAN)
         self.g.on_post_tool_call('miner_install', {'proposal_id': 'p'}, json.dumps({'installed': str(d / 'SKILL.md')}))
@@ -163,7 +173,10 @@ class ScanAllAndTools(Base):
         c = C(); guardpkg.register(c)
         self.assertEqual(sorted(c.tools), ['skillguard_decide', 'skillguard_scan_installed'])
         self.assertEqual(sorted(c.hooks), ['on_skill_lifecycle', 'post_tool_call', 'pre_llm_call', 'pre_tool_call', 'transform_tool_result'])
-        self.assertEqual(guardpkg.on_pre_tool_call('skillguard_decide', {'skill': 'x', 'decision': 'approve'})['action'], 'approve')
+        prompt = guardpkg.on_pre_tool_call('skillguard_decide', {'skill': 'x', 'decision': 'approve'})
+        self.assertEqual(prompt['action'], 'approve'); self.assertIn('approve skill \"x\"', prompt['message'])
+        other = guardpkg.on_pre_tool_call('skillguard_decide', {'skill': 'y', 'decision': 'quarantine'})
+        self.assertIn('quarantine skill \"y\"', other['message']); self.assertNotEqual(prompt['rule_key'], other['rule_key'])
         guardpkg._state['guard'] = self.g
         self.assertEqual(json.loads(c.tools['skillguard_scan_installed']({}))['skills_checked'], 0)
         self.assertIn('error', json.loads(c.tools['skillguard_decide']({'skill': 'nope', 'decision': 'approve'})))

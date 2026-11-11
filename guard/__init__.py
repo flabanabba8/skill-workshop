@@ -20,7 +20,10 @@ def _safe(fn, *a):
 
 
 def on_pre_tool_call(tool_name='', args=None, **kwargs):
-    if tool_name == 'skillguard_decide': return {'action': 'approve', 'message': 'Skill Guard: this records your decision about one skill version (approve it so it can be used, or quarantine it so it cannot). A person must confirm, so a skill cannot approve itself.', 'rule_key': 'skillguard-decide'}
+    if tool_name == 'skillguard_decide':
+        args = args or {}; name = str(args.get('skill', ''))[:120]; decision = str(args.get('decision', ''))
+        if decision not in ('approve', 'quarantine') or not name: return {'action': 'block', 'message': 'Skill Guard: specify a skill and a valid decision.'}
+        return {'action': 'approve', 'message': f'Skill Guard: {decision} skill {json.dumps(name)} for its current version. A person must confirm.', 'rule_key': f'skillguard-decide:{decision}:{name}'}
     return _safe(guard().on_pre_tool_call, tool_name, args)
 
 
