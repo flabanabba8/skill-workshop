@@ -25,12 +25,12 @@ def on_transform_tool_result(tool_name='', result='', **kwargs):
 def on_pre_tool_call(tool_name='', args=None, **kwargs): return shield().check(tool_name, args or {}, **kwargs)
 
 
-def invoke(name, args):
+def invoke(name, args, **ctx):
     try:
         sh = shield()
         if name == 'shield_scan': return json.dumps(sh.scan(args['text']))
         if name == 'shield_trust': return json.dumps(sh.trust(args['value']))
-        return json.dumps(sh.report(args.get('session_id')))
+        return json.dumps(sh.report(args.get('session_id') or ctx.get('session_id') or ctx.get('task_id')))
     except (ValueError, TypeError, OSError, KeyError) as exc:
         return json.dumps({'error': str(exc)})
 
@@ -54,4 +54,4 @@ def register(ctx):
     for name, (description, properties, required) in TOOLS.items():
         ctx.register_tool(name=name, toolset='taint_shield', schema={'name': name, 'description': description,
             'parameters': {'type': 'object', 'properties': properties, 'required': required, 'additionalProperties': False}},
-            handler=lambda args, _name=name, **kwargs: invoke(_name, args))
+            handler=lambda args, _name=name, **kwargs: invoke(_name, args, **kwargs))
