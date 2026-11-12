@@ -28,7 +28,7 @@ def invoke(name, args):
         if name == 'miner_scan':
             sessions = core.load(db, args.get('days', 60)); found = core.mine(sessions, args.get('min_support', 3), args.get('min_steps', 3), 6)
             _state['scan'] = {p['pattern_id']: (p, sessions) for p in found}
-            return json.dumps({'sessions_read': len(sessions), 'patterns': [{k: v for k, v in p.items() if not k.startswith('_')} for p in found[:15]], 'notice': 'Counts of tool names only; nothing was read from message text. Use miner_propose to draft one.'})
+            return json.dumps({'sessions_read': len(sessions), 'patterns': [{k: v for k, v in p.items() if not k.startswith('_')} for p in found[:15]], 'notice': 'Counts of tool names, plus each session\'s first request in abstracted, redacted form (used only to find shared wording; returned as request_terms). Use miner_propose to draft one.'})
         if name == 'miner_propose':
             scan = _state.get('scan', {}).get(args['pattern_id'])
             if not scan: raise ValueError('Run miner_scan first, then propose one of its pattern_ids')
@@ -53,7 +53,7 @@ def invoke(name, args):
 S = {'type': 'string'}
 I0 = {'type': 'integer', 'minimum': 0}
 TOOLS = {
-    'miner_scan': ('Scan recent sessions (tool names and counts only) for tool workflows you repeat, and check each against sessions held out of the mining. Returns ranked patterns with support, held-out hits and consistency.', {'days': {'type': 'integer', 'minimum': 1, 'maximum': 365}, 'min_support': {'type': 'integer', 'minimum': 2}, 'min_steps': {'type': 'integer', 'minimum': 2, 'maximum': 6}}, []),
+    'miner_scan': ('Scan recent sessions (mostly tool names and counts, plus the first request of each session in abstracted, redacted form (paths, URLs, long ids and numbers replaced; secrets redacted by pattern), used only to find wording that sessions share) for tool workflows you repeat, and check each against sessions held out of the mining. Returns ranked patterns with support, held-out hits and consistency.', {'days': {'type': 'integer', 'minimum': 1, 'maximum': 365}, 'min_support': {'type': 'integer', 'minimum': 2}, 'min_steps': {'type': 'integer', 'minimum': 2, 'maximum': 6}}, []),
     'miner_propose': ('Draft a skill for one scanned pattern, using abstracted examples and up to three of your original request texts (redacted). Saves a proposal; installs nothing.', {'pattern_id': S}, ['pattern_id']),
     'miner_diagnose': ('Return bounded, redacted diagnosis context for one proposal or revision: the unchanged mining verdict and numbers, structural problems in the draft, and where its supporting sessions hit errors or retries. Reads only that proposal\'s own sessions. For the host agent to reason over; installs and changes nothing.', {'proposal_id': S, 'revision': I0}, ['proposal_id']),
     'miner_refine': ('Save your revised SKILL.md text as a new numbered revision next to the original proposal, which is never modified. Rejects retired workflows. Nothing is installed.', {'proposal_id': S, 'skill_text': S, 'notes': S, 'name': {'type': 'string', 'description': 'Optional: a human skill name for this proposal (lowercase letters, digits, hyphens), replacing the generated tool-list name. The SKILL.md frontmatter name must match it.'}}, ['proposal_id', 'skill_text']),

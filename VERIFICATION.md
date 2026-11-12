@@ -1,7 +1,8 @@
 # Verification
 
-## Skill Workshop 0.3.2 (the suite)
+## Skill Workshop 0.3.3 (the suite)
 
+- **0.3.3:** Maintainer review. Probe subprocesses get a minimal environment; the email pattern is length-bounded and each result is scanned once across the two hooks; skill folders come from hermes_cli.config.load_config(); miner wording states plainly that it reads local session history; requires_hermes >=0.23.0. Re-tested: 113 offline tests, all passing. Live test through Hermes 0.23.0 (2026-11-12, own profile): miner scan, Skill Guard scan and the builder resources report ran; no key values appear in any result.
 - **0.3.2:** Shield handles Markdown image labels, JSON string values and shell continuations, and exact trusted URLs are honored without trusting other URLs on the same host. The trust approval names its destination. Skill Guard applies the approved directory decision to a matching linked-file view, including after restart. Live tests and limits are in the local live-test report.
 - **0.3.1:** Shield extracts commands from markup, prose and inline code, normalizes zero-width characters, and exempts commands the user typed. Decision approvals identify the requested skill and decision; batched skill writes identify their target and track successful writes. Live tests and remaining limitations are recorded in the local live-test report. The real-skill scan remained 3 flagged out of 116, unchanged from 0.3.0.
 

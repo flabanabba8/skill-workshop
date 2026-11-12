@@ -10,7 +10,7 @@ Resolve exact parameter shapes from [tool contracts](tools.md) and
 
 ## Setup decisions
 
-The history is the host's own session database, read-only; use the window and limits the user already stated or saved, and ask only when nothing is known. Scan reads tool names and counts; propose reads up to three original request texts; diagnose reads redacted error text of failed steps in the proposal's own sessions. Repeated sequences describe habits rather than an optimal method. Keep retired workflows and generic wrappers excluded.
+The history is the host's own session database, read-only; use the window and limits the user already stated or saved, and ask only when nothing is known. Scan reads tool names and counts, plus each session's first request in abstracted, redacted form (used only to find shared wording); propose reads up to three original request texts; diagnose reads redacted error text of failed steps in the proposal's own sessions. Repeated sequences describe habits rather than an optimal method. Keep retired workflows and generic wrappers excluded.
 
 ## Worked task flow
 

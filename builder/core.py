@@ -12,6 +12,11 @@ NAME = re.compile(r'^[a-z0-9][a-z0-9-]{2,60}$')
 EXEC = re.compile(r'^[A-Za-z0-9_.+-]{1,40}$')
 CASES = ('limited-offline', 'capable-gpu-cached', 'hosted-selected')
 VERDICTS = ('works', 'degraded', 'blocked')
+
+def _probe_env():
+    """Environment for every probe: PATH, HOME and LANG only, so a probed program never sees provider keys from the Hermes environment."""
+    return {'PATH': os.environ.get('PATH', ''), 'HOME': str(Path.home()), 'LANG': 'C'}
+
 PROBE = ('python3', 'pip', 'uv', 'node', 'npm', 'git', 'curl', 'ffmpeg', 'ffprobe', 'sox', 'pandoc', 'tesseract', 'docker', 'ollama', 'llama-server', 'whisper-cli')
 GENERIC = {'helper', 'utility', 'utilities', 'assistant', 'wrapper', 'general', 'tool', 'tools', 'skill', 'misc', 'stuff', 'generic'}
 HEDGE = re.compile(r'(?i)\b(or|e\.g\.|for example|such as|if available|when available|any compatible|alternatives?|discover|example)\b')
@@ -135,7 +140,7 @@ def resources(include_model_cache=True, extra=()):
         p = shutil.which(n)
         if not p: exe[n] = None; continue
         try:
-            r = subprocess.run([p, '--version'], capture_output=True, text=True, timeout=3, stdin=subprocess.DEVNULL); exe[n] = {'found': True, 'version': _scrub(((r.stdout or r.stderr).strip().split('\n') or [''])[0][:100])}
+            r = subprocess.run([p, '--version'], capture_output=True, text=True, timeout=3, stdin=subprocess.DEVNULL, env=_probe_env()); exe[n] = {'found': True, 'version': _scrub(((r.stdout or r.stderr).strip().split('\n') or [''])[0][:100])}
         except (OSError, subprocess.SubprocessError): exe[n] = {'found': True, 'version': None}
     for n in list(extra)[:20]:
         if isinstance(n, str) and EXEC.match(n): exe[n] = {'found': bool(shutil.which(n)), 'version': 'not probed (extra names are located, never run)'}
@@ -143,7 +148,7 @@ def resources(include_model_cache=True, extra=()):
     smi = shutil.which('nvidia-smi'); gpus = []
     if smi:
         try:
-            r = subprocess.run([smi, '--query-gpu=name,memory.total', '--format=csv,noheader'], capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL)
+            r = subprocess.run([smi, '--query-gpu=name,memory.total', '--format=csv,noheader'], capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL, env=_probe_env())
             gpus = []
             for l in r.stdout.splitlines()[:8]:
                 m = re.search(r'(\d+)\s*MiB', l)

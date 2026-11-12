@@ -108,10 +108,10 @@ def skill_roots():
         from hermes_constants import get_hermes_home
         roots.append(Path(get_hermes_home()) / 'skills')
     except ImportError: pass
-    try:   # skills.external_dirs from the user's config.yaml, read directly (no private Hermes imports)
-        import yaml
+    try:   # skills.external_dirs through Hermes's public config loader (no PyYAML, no private imports)
+        from hermes_cli.config import load_config
         from hermes_constants import get_hermes_home
-        home = Path(get_hermes_home()); cfg = yaml.safe_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
+        home = Path(get_hermes_home()); cfg = load_config() or {}
         raw = ((cfg.get('skills') or {}).get('external_dirs')) if isinstance(cfg, dict) else None
         for e in ([raw] if isinstance(raw, str) else raw if isinstance(raw, list) else []):
             if isinstance(e, str) and e.strip():

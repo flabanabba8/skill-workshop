@@ -4,7 +4,7 @@ Registered source schemas; registration alone does not establish live behavior.
 
 ## miner_scan
 
-Scan recent sessions (tool names and counts only) for tool workflows you repeat, and check each against sessions held out of the mining. Returns ranked patterns with support, held-out hits and consistency.
+Scan recent sessions (mostly tool names and counts, plus the first request of each session in abstracted, redacted form (paths, URLs, long ids and numbers replaced; secrets redacted by pattern), used only to find wording that sessions share) for tool workflows you repeat, and check each against sessions held out of the mining. Returns ranked patterns with support, held-out hits and consistency.
 
 Inputs: `days` (optional), `min_support` (optional), `min_steps` (optional).
 

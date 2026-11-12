@@ -5,12 +5,13 @@ import html
 import os
 from pathlib import Path
 import re
+import hashlib
 import time
 import uuid
 
 UNTRUSTED_NAME = re.compile(r'(web|browser|fetch|http|mail|inbox|rss|scrape|crawl|search|url|page|download|read_file|file_read|document|transcrib|captions_audio_review|ledger_(?:context|get)|source_read|caselaw_(?:examine|review|read)|pdf)', re.I)
 URL = re.compile(r'https?://[^\s<>"\')\]]+', re.I)
-EMAIL = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')
+EMAIL = re.compile(r'(?<![\w.%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}\b')
 TLDS = 'com|net|org|io|dev|ai|co|xyz|ru|cn|info|biz|me|app|cloud|top|site|online|us|uk|de|fr|jp|in|ly|gg|to|cc|ws|tk|pw|su|ml|ga|cf|gq|vip|club|link|click|download|work|live'
 DOMAIN = re.compile(r'(?<![\w@.-])((?:[a-z0-9](?:[a-z0-9-]{0,40}[a-z0-9])?\.)+(?:' + TLDS + r'))(?![\w-])', re.I)
 IPV4 = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
@@ -136,6 +137,16 @@ class Shield:
     def is_untrusted_tool(self, name): return bool(UNTRUSTED_NAME.search(name)) and name not in ('shield_scan', 'shield_report', 'shield_trust')
 
     def scan(self, text):
+        """Scan one tool result. The same text is scanned once: the post-call and transform hooks both ask, and the second gets the cached answer."""
+        key = hashlib.sha1(text[:200001].encode('utf-8', 'replace')).digest()
+        cache = self.__dict__.setdefault('_scan_cache', {})
+        if key in cache: return dict(cache[key])
+        out = self._scan(text)
+        if len(cache) >= 8: cache.pop(next(iter(cache)))
+        cache[key] = out
+        return dict(out)
+
+    def _scan(self, text):
         truncated=len(text)>200000;text=text[:200000]
         return {'values': sorted({f'{k}:{v}' for k, v in values_in(text)})[:40], 'command_lines': sorted(command_lines(text))[:10],
                 'injection_phrases': sorted({m.group(0).lower()[:80] for r in PHRASE_RES for m in [r.search(text)] if m}),

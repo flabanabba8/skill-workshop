@@ -201,16 +201,37 @@ class ScanAllAndTools(Base):
 
 
 class ExternalFolders(unittest.TestCase):
-    def test_external_skill_folders_from_config_are_included(self):
+    def test_external_skill_folders_from_config_are_included_through_hermes_public_loader_without_pyyaml(self):
         import sys, types
         with tempfile.TemporaryDirectory() as home:
             home = Path(home); (home / 'skills').mkdir(); ext = home / 'shared'; (ext / 'x').mkdir(parents=True); (ext / 'x' / 'SKILL.md').write_text(CLEAN)
-            (home / 'config.yaml').write_text('skills:\n  external_dirs:\n    - %s\n' % ext)
-            m = types.ModuleType('hermes_constants'); m.get_hermes_home = lambda: home; saved = sys.modules.get('hermes_constants'); sys.modules['hermes_constants'] = m
-            try: roots = core.skill_roots(); self.assertEqual(roots, [(home / 'skills').resolve(), ext.resolve()]); self.assertEqual([p.name for p in core.find_skills(roots)], ['x'])
+            const = types.ModuleType('hermes_constants'); const.get_hermes_home = lambda: home
+            cfgmod = types.ModuleType('hermes_cli.config'); cfgmod.load_config = lambda: {'skills': {'external_dirs': [str(ext)]}}
+            pkg = types.ModuleType('hermes_cli'); pkg.config = cfgmod
+            blocked = types.ModuleType('yaml'); blocked.__getattr__ = lambda n: (_ for _ in ()).throw(ImportError('PyYAML is not available'))
+            saved = {k: sys.modules.get(k) for k in ('hermes_constants', 'hermes_cli', 'hermes_cli.config', 'yaml')}
+            sys.modules.update({'hermes_constants': const, 'hermes_cli': pkg, 'hermes_cli.config': cfgmod}); sys.modules['yaml'] = None   # importing yaml now fails
+            try:
+                roots = core.skill_roots(); self.assertEqual(roots, [(home / 'skills').resolve(), ext.resolve()]); self.assertEqual([p.name for p in core.find_skills(roots)], ['x'])
             finally:
-                if saved is None: sys.modules.pop('hermes_constants', None)
-                else: sys.modules['hermes_constants'] = saved
+                for k, v in saved.items():
+                    if v is None: sys.modules.pop(k, None)
+                    else: sys.modules[k] = v
+
+    def test_relative_external_dirs_resolve_against_the_hermes_home(self):
+        import sys, types
+        with tempfile.TemporaryDirectory() as home:
+            home = Path(home); (home / 'skills').mkdir(); (home / 'rel' / 'y').mkdir(parents=True)
+            const = types.ModuleType('hermes_constants'); const.get_hermes_home = lambda: home
+            cfgmod = types.ModuleType('hermes_cli.config'); cfgmod.load_config = lambda: {'skills': {'external_dirs': 'rel'}}
+            pkg = types.ModuleType('hermes_cli'); pkg.config = cfgmod
+            saved = {k: sys.modules.get(k) for k in ('hermes_constants', 'hermes_cli', 'hermes_cli.config')}
+            sys.modules.update({'hermes_constants': const, 'hermes_cli': pkg, 'hermes_cli.config': cfgmod})
+            try: self.assertIn((home / 'rel').resolve(), core.skill_roots())
+            finally:
+                for k, v in saved.items():
+                    if v is None: sys.modules.pop(k, None)
+                    else: sys.modules[k] = v
 
 
 class FalsePositives(unittest.TestCase):

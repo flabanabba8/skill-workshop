@@ -22,7 +22,7 @@ Add a domain, address or URL to the permanent trusted list. Always requires a pe
 
 ## miner_scan
 
-Scan recent sessions (tool names and counts only) for tool workflows you repeat, and check each against held-out sessions. Inputs: `days`, `min_support`, `min_steps` (all optional).
+Scan recent sessions (mostly tool names and counts, plus the first request of each session in abstracted, redacted form (paths, URLs, long ids and numbers replaced; secrets redacted by pattern), used only to find wording that sessions share) for tool workflows you repeat, and check each against held-out sessions. Inputs: `days`, `min_support`, `min_steps` (all optional).
 
 ## miner_propose
 
