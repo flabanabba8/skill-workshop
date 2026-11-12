@@ -75,6 +75,15 @@ class Wording(unittest.TestCase):
         self.assertIn('request_terms', (ROOT / 'README.md').read_text())
 
 
+class SessionsThroughHermesState(unittest.TestCase):
+    def test_the_miner_reads_sessions_through_hermes_state_and_never_queries_state_db_itself(self):
+        """Review (recommended): read sessions through the public hermes_state module so a core schema change does not break the miner."""
+        text = (ROOT / 'miner' / 'core.py').read_text()
+        self.assertNotIn('sqlite3', text)
+        self.assertIn('from hermes_state import SessionDB', text)
+        self.assertIn('read_only=True', text)
+
+
 class Manifest(unittest.TestCase):
     def test_the_hermes_floor_covers_the_pre_llm_call_block(self):
         m = re.search(r'requires_hermes:\s*"?>=(\d+)\.(\d+)\.(\d+)', (ROOT / 'plugin.yaml').read_text())

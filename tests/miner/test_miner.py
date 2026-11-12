@@ -1,7 +1,6 @@
 import importlib.util
 import json
 from pathlib import Path
-import sqlite3
 import sys
 import tempfile
 import time
@@ -9,17 +8,15 @@ import unittest
 
 root = Path(__file__).parents[2]
 from tests.fixture_suite import suite
+from tests.miner.statedb import Store
 module = suite.miner
 core = module.core
 SECRET = 'sk-' + 'Qz9Lm2Xa' * 4
 
 
 def make_db(path, flaky_every=0, wrapped=False):
-    con = sqlite3.connect(path)
-    con.execute('CREATE TABLE sessions (id TEXT, started_at REAL)'); con.execute('CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, tool_name TEXT, tool_call_id TEXT)')
+    store = Store(path); msg = store.msg
     now = time.time(); n = 0
-
-    def msg(sid, role, content=None, tool_calls=None, tool_name=None, call_id=None): con.execute('INSERT INTO messages (session_id, role, content, tool_calls, tool_name, tool_call_id) VALUES (?,?,?,?,?,?)', (sid, role, content, tool_calls, tool_name, call_id))
 
     def call(sid, tool, args, result):
         nonlocal n; n += 1; cid = f'c{n}'
@@ -28,39 +25,38 @@ def make_db(path, flaky_every=0, wrapped=False):
 
     ok = {'output': 'ok', 'exit_code': 0}
     for i in range(9):   # the repeated workflow: read, git status, patch, pytest
-        sid = f's{i:02d}'; con.execute('INSERT INTO sessions VALUES (?,?)', (sid, now - 1000 + i))
+        sid = f's{i:02d}'; store.session(sid, now - 1000 + i)
         msg(sid, 'user', f'Fix the bug in module{i}.py and make sure the tests pass /home/someone/proj{i}' + (f' key {SECRET}' if i == 0 else ''))
         call(sid, 'read_file', {'path': f'/home/someone/proj{i}/m{i}.py'}, {'content': 'x'}); call(sid, 'terminal', {'command': 'git status'}, ok)
         call(sid, 'patch', {'path': f'm{i}.py', 'old_string': 'a', 'new_string': 'b'}, {'success': True})
         call(sid, 'terminal', {'command': 'cd /home/someone/proj && python -m pytest -q'}, {'output': '1 failed', 'exit_code': 1} if flaky_every and i % flaky_every == 0 else ok)
     for i in range(4):   # unrelated sessions
-        sid = f'r{i}'; con.execute('INSERT INTO sessions VALUES (?,?)', (sid, now - 500 + i)); msg(sid, 'user', 'something else')
+        sid = f'r{i}'; store.session(sid, now - 500 + i); msg(sid, 'user', 'something else')
         call(sid, 'web_search', {'q': f'topic {i}'}, {'results': []}); call(sid, 'web_extract', {'url': f'https://e{i}.example'}, {'content': 'x'})
-    con.commit(); con.close()
+    store.close()
 
 
 def make_chore_db(path):
     """Eight chats; every one opens with the same housekeeping calls. Four repeat one chore (meeting notes -> action list)."""
-    con = sqlite3.connect(path)
-    con.execute('CREATE TABLE sessions (id TEXT, started_at REAL)'); con.execute('CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, tool_name TEXT, tool_call_id TEXT)')
+    store = Store(path)
     now = time.time(); n = 0
 
     def call(sid, tool, args, result):
         nonlocal n; n += 1; cid = f'c{n}'
-        con.execute('INSERT INTO messages (session_id, role, tool_calls) VALUES (?,?,?)', (sid, 'assistant', json.dumps([{'id': cid, 'function': {'name': tool, 'arguments': json.dumps(args)}}])))
-        con.execute('INSERT INTO messages (session_id, role, content, tool_name, tool_call_id) VALUES (?,?,?,?,?)', (sid, 'tool', json.dumps(result), tool, cid))
+        store.msg(sid, 'assistant', tool_calls=[{'id': cid, 'function': {'name': tool, 'arguments': json.dumps(args)}}])
+        store.msg(sid, 'tool', json.dumps(result), tool_name=tool, call_id=cid)
     ok = {'output': 'ok', 'exit_code': 0}
     asks = ['Turn my meeting notes from Monday into an action list', 'Please turn the meeting notes into an action list with owners', 'Can you turn these meeting notes into an action list', 'Turn the meeting notes for the budget call into an action list']
     others = ['Find a good ramen place', 'What changed in the python release', 'Summarise this article for me', 'Look up the weather for Friday']
     for i, ask in enumerate(asks + others):
-        sid = f'c{i}'; con.execute('INSERT INTO sessions VALUES (?,?)', (sid, now - 1000 + i))
-        con.execute('INSERT INTO messages (session_id, role, content) VALUES (?,?,?)', (sid, 'user', ask))
+        sid = f'c{i}'; store.session(sid, now - 1000 + i)
+        store.msg(sid, 'user', ask)
         call(sid, 'skills_list', {}, {'skills': []}); call(sid, 'search_files', {'pattern': '*.md'}, {'files': []}); call(sid, 'skill_view', {'name': 'notes'}, {'success': True})
         if i < 4:
             call(sid, 'read_file', {'path': f'/home/someone/notes/meeting{i}.md'}, {'content': 'x'}); call(sid, 'write_file', {'path': f'/home/someone/notes/actions{i}.md', 'content': '- a'}, {'success': True})
         else:
             call(sid, 'web_search', {'q': ask}, {'results': []}); call(sid, 'web_extract', {'url': f'https://e{i}.example'}, {'content': 'x'}); call(sid, 'read_file', {'path': f'/tmp/other{i}.txt'}, {'content': 'x'})
-    con.commit(); con.close()
+    store.close()
 
 
 class ChoreNotHousekeeping(unittest.TestCase):

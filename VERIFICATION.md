@@ -43,3 +43,10 @@ The live runs and the demonstrations of each part were made with the stand-alone
 
 - Running the bundled plugin in a live Hermes session with all three parts enabled together (for example how the Shield and the install approvals interact in the on-screen prompt).
 - Platforms other than Linux.
+
+
+## 0.3.4 - sessions are read through hermes_state (2026-11-12)
+
+The miner no longer opens `state.db` with its own SQL. It reads sessions and messages through Hermes's public `hermes_state.SessionDB` (read-only: `list_sessions_rich`, `get_session`, `get_messages`), as the maintainers recommended in review, so a core schema change does not break it. The miner tests now build their session stores through `SessionDB` too instead of hand-made tables.
+
+- Tested here: 114 Python tests, also with ResourceWarning as an error, run with the Hermes Python and `HERMES_DISABLE_LAZY_INSTALLS=1` against one test `HERMES_HOME` (importing `hermes_state` under a fresh home triggers Hermes's own dependency installs).

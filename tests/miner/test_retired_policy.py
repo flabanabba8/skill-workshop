@@ -1,7 +1,7 @@
 """Offline fixtures for the retirement policy; none invokes a worker."""
 from tests.miner.test_miner import core, make_db
+from tests.miner.statedb import Store
 import json
-import sqlite3
 from pathlib import Path
 import tempfile
 import unittest
@@ -27,12 +27,12 @@ class RetirementTests(unittest.TestCase):
 class RefinementRetirementTests(unittest.TestCase):
     def test_nested_retired_command_in_a_tool_call_envelope_is_caught_before_abstraction(self):
         with tempfile.TemporaryDirectory() as d:
-            db = str(Path(d) / 'state.db'); make_db(db, wrapped=True); con = sqlite3.connect(db)
+            db = str(Path(d) / 'state.db'); make_db(db, wrapped=True); store = Store(db)
             for sid in ('s00', 's01', 's03'):
                 cid = 'x' + sid; bad = 'python /tmp/disposable-vision/scripts/vision_inspect.py a.png'  # retirement-policy
-                con.execute('INSERT INTO messages (session_id, role, tool_calls) VALUES (?,?,?)', (sid, 'assistant', json.dumps([{'id': cid, 'function': {'name': 'tool_call', 'arguments': json.dumps({'calls': [{'name': 'terminal', 'arguments': {'command': bad}}]})}}])))
-                con.execute('INSERT INTO messages (session_id, role, tool_name, content, tool_call_id) VALUES (?,?,?,?,?)', (sid, 'tool', 'terminal', '{"exit_code": 0}', cid))
-            con.commit(); con.close(); sessions = core.load(db, 30)
+                store.msg(sid, 'assistant', tool_calls=[{'id': cid, 'function': {'name': 'tool_call', 'arguments': json.dumps({'calls': [{'name': 'terminal', 'arguments': {'command': bad}}]})}}])
+                store.msg(sid, 'tool', '{"exit_code": 0}', tool_name='terminal', call_id=cid)
+            store.close(); sessions = core.load(db, 30)
             with self.assertRaisesRegex(ValueError, 'Retired agent workflow'): core.draft({'steps': ['terminal:python'], '_support': ['s00']}, sessions, db)
 
     def test_retired_text_is_refused_on_refine_and_fails_check(self):

@@ -1,11 +1,11 @@
 """Offline tests for envelope normalization, diagnose, refine, check and gated install. No model or network."""
 import json
 from pathlib import Path
-import sqlite3
 import tempfile
 import time
 import unittest
 from tests.miner.test_miner import core, module, make_db
+from tests.miner.statedb import Store
 
 
 class EnvelopeTests(unittest.TestCase):
@@ -20,11 +20,10 @@ class EnvelopeTests(unittest.TestCase):
         self.assertNotIn('"calls"', text); self.assertNotIn('{"', text); self.assertIn('`git status`', text); self.assertIn('path=<path>', text)
 
     def test_duplicate_calls_of_one_tool_in_a_batch_stay_unmapped(self):
-        con = sqlite3.connect(self.db); con.execute('CREATE TABLE sessions (id TEXT, started_at REAL)'); con.execute('CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, tool_name TEXT, tool_call_id TEXT)')
-        con.execute('INSERT INTO sessions VALUES (?,?)', ('d', time.time()))
+        store = Store(self.db); store.session('d', time.time())
         batch = {'calls': [{'name': 'read_file', 'arguments': {'path': '/a/b/c'}}, {'name': 'read_file', 'arguments': {'path': '/d/e/f'}}]}
-        con.execute('INSERT INTO messages (session_id, role, tool_calls) VALUES (?,?,?)', ('d', 'assistant', json.dumps([{'id': 'k', 'function': {'name': 'tool_call', 'arguments': json.dumps(batch)}}])))
-        con.execute('INSERT INTO messages (session_id, role, tool_name, content, tool_call_id) VALUES (?,?,?,?,?)', ('d', 'tool', 'read_file', '{}', 'k')); con.commit(); con.close()
+        store.msg('d', 'assistant', tool_calls=[{'id': 'k', 'function': {'name': 'tool_call', 'arguments': json.dumps(batch)}}])
+        store.msg('d', 'tool', '{}', tool_name='read_file', call_id='k'); store.close()
         step = core.load(self.db, 30)[0]['steps'][0]; self.assertEqual((step['args'], step['mapped']), ({}, False)); self.assertIn('/d/e/f', step['raw'])  # guard still sees every inner call
 
 

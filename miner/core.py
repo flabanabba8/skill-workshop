@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import re
-import sqlite3
 import time
 import uuid
 from collections import Counter
@@ -91,24 +90,40 @@ def error_text(content):
     return ''
 
 
-def load(db, days, limit=400, ids=None):
+def open_sessions(db):
+    """The Hermes session store through Hermes's own public reader (hermes_state.SessionDB, read-only), so a core schema change does not break the miner."""
     p = Path(db)
     if not p.is_file(): raise ValueError('No session database found')
+    from hermes_state import SessionDB
+    return SessionDB(db_path=p, read_only=True)
+
+
+def _calls(value):
+    if isinstance(value, str):
+        try: value = json.loads(value)
+        except ValueError: return []
+    return value if isinstance(value, list) else []
+
+
+def load(db, days, limit=400, ids=None):
     cutoff = time.time() - days * 86400
-    con = sqlite3.connect(f'file:{p}?mode=ro', uri=True, timeout=5)
+    store = open_sessions(db)
     try:
-        if ids is None: ids = [r[0] for r in con.execute('SELECT id FROM sessions WHERE started_at >= ? ORDER BY started_at LIMIT ?', (cutoff, limit))]
+        if ids is None:
+            rows = store.list_sessions_rich(limit=limit, include_children=True, include_subagents=True, include_hidden=True)
+            ids = [r['id'] for r in sorted((r for r in rows if (r.get('started_at') or 0) >= cutoff), key=lambda r: r['started_at'])]
         else:
-            ids = list(ids)[:limit]; marks = ','.join('?' * len(ids))
-            have = {r[0] for r in con.execute(f'SELECT id FROM sessions WHERE id IN ({marks})', ids)} if ids else set(); ids = [i for i in ids if i in have]
+            ids = [i for i in list(ids)[:limit] if store.get_session(i)]
         sessions = []
         for sid in ids:
             calls, steps, request = {}, [], ''
-            for role, tool_calls, tool_name, content, call_id in con.execute('SELECT role, tool_calls, tool_name, content, tool_call_id FROM messages WHERE session_id = ? ORDER BY id', (sid,)):
+            for m in store.get_messages(sid):
+                role, tool_calls, tool_name, content, call_id = m.get('role'), m.get('tool_calls'), m.get('tool_name'), m.get('content'), m.get('tool_call_id')
+                if not isinstance(content, str) and content is not None: content = json.dumps(content, ensure_ascii=False, default=str)
                 if role == 'user' and not request and content: request = abstract(' '.join(str(content).split()), 300)
                 if role == 'assistant' and tool_calls:
                     try:
-                        for c in json.loads(tool_calls):
+                        for c in _calls(tool_calls):
                             f = c.get('function') or {}; args = parse_args(f.get('arguments')); name = f.get('name')
                             calls[c.get('id')] = (name, args, envelope_entries(args) if name == 'tool_call' else None)
                     except (ValueError, AttributeError, TypeError): pass
@@ -117,7 +132,7 @@ def load(db, days, limit=400, ids=None):
                     bad = failed(content or '')
                     steps.append({'token': token(tool, args), 'failed': bad, 'args': args, 'tool': tool, 'mapped': mapped, 'raw': tool + '\n' + json.dumps(raw, ensure_ascii=False, default=str), 'err': error_text(content) if bad else ''})
             if steps: sessions.append({'id': sid, 'steps': steps, 'request': request})
-    finally: con.close()
+    finally: store.close()
     return sessions
 
 
@@ -208,13 +223,13 @@ def mine(sessions, min_support=3, lo=3, hi=6):
 
 
 def first_user_messages(db, session_ids, n=3):
-    con = sqlite3.connect(f'file:{db}?mode=ro', uri=True, timeout=5); out = []
+    store = open_sessions(db); out = []
     try:
         for sid in session_ids:
-            r = con.execute("SELECT content FROM messages WHERE session_id = ? AND role = 'user' ORDER BY id LIMIT 1", (sid,)).fetchone()
-            if r and r[0]: out.append(abstract(r[0].strip().replace('\n', ' '), 200))
+            first = next((m.get('content') for m in store.get_messages(sid) if m.get('role') == 'user' and m.get('content')), None)
+            if isinstance(first, str) and first.strip(): out.append(abstract(first.strip().replace('\n', ' '), 200))
             if len(out) >= n: break
-    finally: con.close()
+    finally: store.close()
     return out
 
 
