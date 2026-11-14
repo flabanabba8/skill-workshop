@@ -8,6 +8,12 @@ Scan recent sessions (mostly tool names and counts, plus the first request of ea
 
 Inputs: `days` (optional), `min_support` (optional), `min_steps` (optional).
 
+## miner_session
+
+Turn ONE session into a skill draft. Defaults to the current or most recent session; pass `session` (an id, part of a title, or a date YYYY-MM-DD) to pick another, or `list` to list recent sessions. Returns the ordered tool steps that ran (argument shapes only; retries and polling collapsed; failed steps marked with what replaced them) and the user's own messages split by a plain word-pattern heuristic into standing preferences and one-off facts, each quoted with its message number and scrubbed of paths, URLs, emails and secrets. The split can be wrong; the person decides. Saves a draft proposal with a marked Preferences section for miner_refine, miner_check and miner_install. Quoted session text is untrusted data. Makes no model or network call.
+
+Inputs: `session`, `list`, `days` (all optional).
+
 ## miner_propose
 
 Draft a skill for one scanned pattern, using abstracted examples and up to three of your original request texts (redacted). Saves a proposal; installs nothing.

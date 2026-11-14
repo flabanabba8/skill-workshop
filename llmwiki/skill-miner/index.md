@@ -10,7 +10,7 @@ It equips the active host model with domain knowledge, not a separate LLM servic
 
 ## Domain contract and important limits
 
-The host agent mines bounded read-only history, then diagnoses, refines and checks the draft itself (miner_scan, miner_propose, miner_diagnose, miner_refine, miner_check) and proposes a specific reusable domain skill. Checks are deterministic structure, policy, leak, tool-name and held-out replay checks, not a quality guarantee; a weak verdict stays weak. Generalize resource/model/runtime choices rather than copying personal paths or provider IDs as mandatory. Never recreate retired workflows or generic wrapper skills. Install only a checked revision and only after a person confirms; no silent dependency downloads.
+The host agent mines bounded read-only history, then diagnoses, refines and checks the draft itself (miner_scan or, for one session, miner_session; then miner_propose, miner_diagnose, miner_refine, miner_check) and proposes a specific reusable domain skill. Checks are deterministic structure, policy, leak, tool-name and held-out replay checks, not a quality guarantee; a weak verdict stays weak. Generalize resource/model/runtime choices rather than copying personal paths or provider IDs as mandatory. Never recreate retired workflows or generic wrapper skills. Install only a checked revision and only after a person confirms; no silent dependency downloads.
 
 ## Knowledge map
 

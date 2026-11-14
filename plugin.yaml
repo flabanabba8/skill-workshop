@@ -1,6 +1,6 @@
 name: skill-workshop
-version: "0.3.4"
-description: "Get new skills for Hermes safely: mine them from your past chats (Skill Miner), build them from a description (First Principles Skill Builder), and guard against prompt injection in skills and content you bring in (Taint Shield). Scans every skill before it is installed or used, including ones from other people (Skill Guard); installing your own needs your approval."
+version: "0.4.0"
+description: "Get new skills for Hermes safely: mine them from your past chats, or from the one session you just worked through (Skill Miner), build them from a description (First Principles Skill Builder), and guard against prompt injection in skills and content you bring in (Taint Shield). Scans every skill before it is installed or used, including ones from other people (Skill Guard); installing your own needs your approval."
 author: "Skill Workshop contributors"
 license: GPL-3.0-or-later
 requires_hermes: ">=0.23.0"
@@ -11,6 +11,7 @@ provides_tools:
   - skillguard_scan_installed
   - skillguard_decide
   - miner_scan
+  - miner_session
   - miner_propose
   - miner_diagnose
   - miner_refine

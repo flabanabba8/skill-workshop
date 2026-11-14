@@ -105,7 +105,8 @@ def _calls(value):
     return value if isinstance(value, list) else []
 
 
-def load(db, days, limit=400, ids=None):
+def load(db, days, limit=400, ids=None, with_text=False):
+    """with_text=True also keeps each session's user messages (with their position) and a bounded result text per step, for single-session mining only."""
     cutoff = time.time() - days * 86400
     store = open_sessions(db)
     try:
@@ -116,11 +117,12 @@ def load(db, days, limit=400, ids=None):
             ids = [i for i in list(ids)[:limit] if store.get_session(i)]
         sessions = []
         for sid in ids:
-            calls, steps, request = {}, [], ''
+            calls, steps, request, users = {}, [], '', []
             for m in store.get_messages(sid):
                 role, tool_calls, tool_name, content, call_id = m.get('role'), m.get('tool_calls'), m.get('tool_name'), m.get('content'), m.get('tool_call_id')
                 if not isinstance(content, str) and content is not None: content = json.dumps(content, ensure_ascii=False, default=str)
                 if role == 'user' and not request and content: request = abstract(' '.join(str(content).split()), 300)
+                if with_text and role == 'user' and content: users.append({'text': str(content), 'after_step': len(steps)})
                 if role == 'assistant' and tool_calls:
                     try:
                         for c in _calls(tool_calls):
@@ -131,7 +133,8 @@ def load(db, days, limit=400, ids=None):
                     outer = calls.get(call_id, (None, {}, None)); tool, args, mapped, raw = resolve_call(tool_name, *outer)
                     bad = failed(content or '')
                     steps.append({'token': token(tool, args), 'failed': bad, 'args': args, 'tool': tool, 'mapped': mapped, 'raw': tool + '\n' + json.dumps(raw, ensure_ascii=False, default=str), 'err': error_text(content) if bad else ''})
-            if steps: sessions.append({'id': sid, 'steps': steps, 'request': request})
+                    if with_text: steps[-1]['result_text'] = (content or '')[:4000]
+            if steps or with_text: sessions.append({'id': sid, 'steps': steps, 'request': request, **({'users': users} if with_text else {})})
     finally: store.close()
     return sessions
 

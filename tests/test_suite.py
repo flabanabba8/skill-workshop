@@ -31,7 +31,7 @@ class SuiteRegistration(unittest.TestCase):
     def test_tools_are_exactly_the_declared_tools_once_each(self):
         self.assertEqual(sorted(self.ctx.tools), sorted(declared('provides_tools')))
         self.assertEqual(len(self.ctx.tools), len(set(self.ctx.tools)))
-        self.assertEqual(len(self.ctx.tools), 16)
+        self.assertEqual(len(self.ctx.tools), 17)
 
     def test_hooks_are_exactly_the_declared_hooks(self):
         self.assertEqual(sorted(set(self.ctx.hooks)), sorted(declared('provides_hooks')))

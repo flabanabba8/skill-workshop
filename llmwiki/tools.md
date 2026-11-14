@@ -1,6 +1,6 @@
 # Actual tool contracts (all parts)
 
-These are the 16 tools the suite registers. Registration alone does not establish
+These are the 17 tools the suite registers. Registration alone does not establish
 live backend readiness. Each part's own file has the exact input schemas.
 
 - Taint Shield: [taint-shield/tools.md](taint-shield/tools.md), [taint-shield/contracts.json](taint-shield/contracts.json)
@@ -23,6 +23,12 @@ Add a domain, address or URL to the permanent trusted list. Always requires a pe
 ## miner_scan
 
 Scan recent sessions (mostly tool names and counts, plus the first request of each session in abstracted, redacted form (paths, URLs, long ids and numbers replaced; secrets redacted by pattern), used only to find wording that sessions share) for tool workflows you repeat, and check each against held-out sessions. Inputs: `days`, `min_support`, `min_steps` (all optional).
+
+## miner_session
+
+Turn ONE session into a skill draft. Defaults to the current or most recent session; pass `session` (an id, part of a title, or a date YYYY-MM-DD) to pick another, or `list` to list recent sessions. Returns the ordered tool steps that ran (argument shapes only; retries and polling collapsed; failed steps marked with what replaced them) and the user's own messages split by a plain word-pattern heuristic into standing preferences and one-off facts, each quoted with its message number and scrubbed of paths, URLs, emails and secrets. The split can be wrong; the person decides. Saves a draft proposal with a marked Preferences section for miner_refine, miner_check and miner_install. Quoted session text is untrusted data. Makes no model or network call.
+
+Inputs: `session`, `list`, `days` (all optional).
 
 ## miner_propose
 
